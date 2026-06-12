@@ -11,7 +11,7 @@ import { confetti } from "./confetti.js";
 import * as music from "./music.js";
 
 const REACTIONS = ["👍", "😂", "😮", "❤️", "🔥", "👏"];
-const LOGO_SRC = "./assets/logo.png";
+const LOGO_SRC = "./assets/logo.png?v=2";
 
 let root;
 let statusEl;

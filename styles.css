@@ -25,9 +25,10 @@ body {
   background: linear-gradient(150deg, #a855f7 0%, #ec4899 48%, #fb923c 100%);
   background-attachment: fixed;
   min-height: 100dvh;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: env(safe-area-inset-top) 14px calc(env(safe-area-inset-bottom) + 14px);
-  overflow-x: hidden;
+  display: flex; flex-direction: column; align-items: center;
+  /* Άνετο κενό πάνω & κάτω — το περιεχόμενο δεν ακουμπά ποτέ τις άκρες. */
+  padding: calc(env(safe-area-inset-top) + 30px) 14px calc(env(safe-area-inset-bottom) + 30px);
+  overflow-x: hidden; overflow-y: auto;
 }
 
 /* polka-dot overlay */
@@ -54,7 +55,9 @@ body {
   50% { transform: rotate(calc(var(--rot) * -1)) translateY(-12px); }
 }
 
-#app { position: relative; z-index: 1; width: 100%; max-width: 540px; display: flex; flex-direction: column; }
+/* margin:auto centers vertically when it fits, but (unlike justify-content)
+   never clips when content is tall — it just scrolls, keeping the page padding. */
+#app { position: relative; z-index: 1; width: 100%; max-width: 540px; display: flex; flex-direction: column; margin: auto 0; }
 
 /* ---- card ---- */
 .card {
@@ -75,11 +78,11 @@ body {
 
 /* Home: logo poses like a sticker at the top of the white box — half of it
    sits outside the card, with breathing room above and below. */
-.card.home { overflow: visible; margin-top: 96px; }
+.card.home { overflow: visible; margin-top: 104px; }
 .home .brand { margin-bottom: 8px; }
 .home .logo-img.big {
   width: min(86%, 330px);
-  margin: -118px auto 20px;   /* pull up so ~half is outside + gap below */
+  margin: -116px auto 20px;   /* pull up so ~half is outside + gap below */
 }
 @keyframes logoIn { from { transform: scale(.5) rotate(-8deg); opacity: 0; } 70% { transform: scale(1.06) rotate(3deg); } to { transform: scale(1) rotate(0); opacity: 1; } }
 .tagline { color: var(--ink); font-weight: 700; font-size: 15px; margin: 2px 0 4px; font-family: var(--display); }
