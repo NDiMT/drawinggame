@@ -1,17 +1,29 @@
-// All screen rendering. Subscribes to the store and re-renders the active
-// screen. Sends player actions through actions.js. Pure view layer — it never
-// decides game state, it only reflects what the host sends.
+// Όλο το rendering των οθονών. Κάνει subscribe στο store και ξανασχεδιάζει την
+// ενεργή οθόνη. Στέλνει ενέργειες παίκτη μέσω actions.js. Καθαρό view layer —
+// δεν αποφασίζει ποτέ state, απλώς δείχνει ό,τι στέλνει ο host.
 
 import { store } from "./store.js";
 import { actions } from "./actions.js";
 import { C, TASK, MIN_PLAYERS, MAX_TEXT } from "./protocol.js";
 import { el, AVATAR_COLORS, randomColor } from "./util.js";
 import { DrawingCanvas } from "./canvas.js";
+import { confetti } from "./confetti.js";
 
 const REACTIONS = ["👍", "😂", "😮", "❤️", "🔥", "👏"];
+const LOGO_SRC = "./assets/logo.png";
+
 let root;
 let activeCanvas = null;
 let countdownTimer = null;
+
+// ---- presentation (cinematic reveal) state ----
+let revealMode = "show";        // "show" (auto-play) | "gallery" (περιήγηση)
+let revealMounted = false;
+let presentSteps = [];
+let presentIdx = 0;
+let presentPlaying = true;
+let presentTimer = null;
+let presentChainsRef = null;
 
 export function initUI() {
   root = document.getElementById("app");
@@ -19,25 +31,45 @@ export function initUI() {
   render(store.get());
 }
 
-function render(s) {
+function clearCountdown() {
   if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+}
+function teardownReveal() {
+  if (presentTimer) { clearTimeout(presentTimer); presentTimer = null; }
+  presentSteps = [];
+  presentChainsRef = null;
+  revealMounted = false;
+  revealMode = "show";
+}
+
+function render(s) {
+  if (s.hostClosed) { teardownReveal(); clearCountdown(); activeCanvas = null; root.innerHTML = ""; return root.appendChild(hostClosedScreen()); }
+  if (s.connecting) { teardownReveal(); clearCountdown(); activeCanvas = null; root.innerHTML = ""; return root.appendChild(connectingScreen(s)); }
+
+  if (s.screen !== "reveal") teardownReveal();
+  // Η αυτόματη παρουσίαση οδηγεί μόνη της το DOM — αγνόησε ασήμαντα store updates
+  // (π.χ. reactions) ώστε να μην ξεκινά απ' την αρχή.
+  if (s.screen === "reveal" && revealMounted && revealMode === "show") return;
+
+  clearCountdown();
   activeCanvas = null;
   root.innerHTML = "";
-
-  if (s.hostClosed) return root.appendChild(hostClosedScreen());
-  if (s.connecting) return root.appendChild(connectingScreen(s));
 
   switch (s.screen) {
     case "home": return root.appendChild(homeScreen(s));
     case "lobby": return root.appendChild(lobbyScreen(s));
     case "round": return root.appendChild(roundScreen(s));
     case "waiting": return root.appendChild(waitingScreen(s));
-    case "reveal": return root.appendChild(revealScreen(s));
+    case "reveal": return mountReveal(s);
     default: return root.appendChild(homeScreen(s));
   }
 }
 
 // ---- helpers ------------------------------------------------------------
+
+function logo(cls = "") {
+  return el("img", { class: "logo-img " + cls, src: LOGO_SRC, alt: "Tinaftore" });
+}
 
 function avatar(player, size = 36) {
   const initial = (player.nickname || "?").trim().charAt(0).toUpperCase();
@@ -46,14 +78,6 @@ function avatar(player, size = 36) {
     style: `background:${player.avatarColor};width:${size}px;height:${size}px;font-size:${size * 0.45}px`,
     title: player.nickname,
   }, initial);
-}
-
-function header(title, subtitle) {
-  return el("div", { class: "screen-head" }, [
-    el("h1", { class: "logo", text: "Doodle Relay" }),
-    title ? el("h2", { class: "screen-title", text: title }) : null,
-    subtitle ? el("p", { class: "muted", text: subtitle }) : null,
-  ]);
 }
 
 // ---- HOME ---------------------------------------------------------------
@@ -70,11 +94,11 @@ function homeScreen(s) {
   let color = saved.avatarColor || randomColor();
 
   const nickInput = el("input", {
-    class: "input", maxlength: "16", placeholder: "Your nickname", value: nickname,
+    class: "input", maxlength: "16", placeholder: "Το ψευδώνυμό σου", value: nickname,
     oninput: (e) => { nickname = e.target.value; },
   });
   const codeInput = el("input", {
-    class: "input", inputmode: "numeric", maxlength: "6", placeholder: "6-digit code",
+    class: "input", inputmode: "numeric", maxlength: "6", placeholder: "6ψήφιος κωδικός",
   });
 
   const swatches = el("div", { class: "swatches" },
@@ -93,34 +117,34 @@ function homeScreen(s) {
 
   const create = () => {
     const nn = nickname.trim();
-    if (!nn) return flash("Enter a nickname first");
+    if (!nn) return flash("Βάλε πρώτα ψευδώνυμο");
     saveProfile({ nickname: nn, avatarColor: color });
     actions.createRoom({ nickname: nn, avatarColor: color });
   };
   const join = () => {
     const nn = nickname.trim();
     const code = (codeInput.value || "").replace(/\D/g, "");
-    if (!nn) return flash("Enter a nickname first");
-    if (code.length !== 6) return flash("Enter the 6-digit code");
+    if (!nn) return flash("Βάλε πρώτα ψευδώνυμο");
+    if (code.length !== 6) return flash("Βάλε τον 6ψήφιο κωδικό");
     saveProfile({ nickname: nn, avatarColor: color });
     actions.joinRoom(code, { nickname: nn, avatarColor: color });
   };
 
   return el("div", { class: "card home" }, [
-    header(null, "Write it. Draw it. Lose it in translation."),
-    el("label", { class: "field-label", text: "Nickname" }),
+    el("div", { class: "brand" }, [logo("big"), el("p", { class: "tagline", text: "Γράψε. Ζωγράφισε. Μάντεψε. Γέλα." })]),
+    el("label", { class: "field-label", text: "Ψευδώνυμο" }),
     nickInput,
-    el("label", { class: "field-label", text: "Pick a colour" }),
+    el("label", { class: "field-label", text: "Διάλεξε χρώμα" }),
     swatches,
     el("div", { class: "divider" }),
-    el("button", { class: "btn primary big", onclick: create }, "Create room"),
-    el("div", { class: "or", text: "or join with a code" }),
+    el("button", { class: "btn primary big", onclick: create }, "🎮 Φτιάξε δωμάτιο"),
+    el("div", { class: "or", text: "ή μπες με κωδικό" }),
     el("div", { class: "row" }, [
       codeInput,
-      el("button", { class: "btn", onclick: join }, "Join"),
+      el("button", { class: "btn", onclick: join }, "Μπες"),
     ]),
     s.error ? el("div", { class: "error-banner", text: s.error }) : null,
-    el("p", { class: "tiny muted", text: "Best with 3+ friends on the same Wi-Fi or anywhere online." }),
+    el("p", { class: "tiny muted center", text: "Ιδανικό για 3+ φίλους — στο ίδιο WiFi ή από παντού." }),
   ]);
 }
 
@@ -128,7 +152,6 @@ function homeScreen(s) {
 
 function lobbyScreen(s) {
   const room = s.room || { players: [], settings: {} };
-  const me = s.me || {};
   const amHost = s.isHost;
   const shareUrl = `${location.origin}${location.pathname}#${s.roomCode}`;
 
@@ -140,42 +163,42 @@ function lobbyScreen(s) {
           el("span", { class: "p-name", text: p.nickname }),
           el("span", { class: "p-tags" }, [
             p.isHost ? el("span", { class: "tag host", text: "HOST" }) : null,
-            p.isConnected ? null : el("span", { class: "tag off", text: "offline" }),
+            p.isConnected ? null : el("span", { class: "tag off", text: "εκτός" }),
           ]),
         ]),
         (amHost && !p.isHost)
-          ? el("button", { class: "kick", title: "Kick", onclick: () => actions.sendToHost({ t: C.KICK, targetId: p.id }) }, "✕")
+          ? el("button", { class: "kick", title: "Διώξε", onclick: () => actions.sendToHost({ t: C.KICK, targetId: p.id }) }, "✕")
           : null,
       ])
     )
   );
 
   const settings = room.settings || {};
-  const startDisabled = room.players.filter((p) => p.isConnected).length < MIN_PLAYERS;
+  const connected = room.players.filter((p) => p.isConnected).length;
+  const startDisabled = connected < MIN_PLAYERS;
 
   return el("div", { class: "card lobby" }, [
-    header("Lobby", null),
+    el("div", { class: "lobby-head" }, [logo("small"), el("h2", { class: "screen-title", text: "Λόμπι" })]),
     el("div", { class: "code-box" }, [
-      el("span", { class: "muted tiny", text: "ROOM CODE" }),
+      el("span", { class: "muted tiny", text: "ΚΩΔΙΚΟΣ ΔΩΜΑΤΙΟΥ" }),
       el("div", { class: "code", text: s.roomCode }),
-      el("button", { class: "btn small", onclick: () => copy(shareUrl, "Invite link copied!") }, "Copy invite link"),
+      el("button", { class: "btn small", onclick: () => copy(shareUrl, "Ο σύνδεσμος αντιγράφηκε!") }, "🔗 Αντιγραφή συνδέσμου"),
     ]),
-    el("h3", { class: "section", text: `Players (${room.players.length})` }),
+    el("h3", { class: "section", text: `Παίκτες (${room.players.length})` }),
     playerList,
-    amHost ? hostSettings(settings) : el("p", { class: "muted tiny", text: "Waiting for the host to start…" }),
+    amHost ? hostSettings(settings) : el("p", { class: "muted tiny center", text: "Περιμένουμε τον host να ξεκινήσει…" }),
     amHost
       ? el("button", {
           class: "btn primary big", disabled: startDisabled || false,
           onclick: () => actions.sendToHost({ t: C.START_GAME }),
-        }, startDisabled ? `Need ${MIN_PLAYERS}+ players` : "Start game")
+        }, startDisabled ? `Χρειάζονται ${MIN_PLAYERS}+ παίκτες` : "🚀 Ξεκίνα το παιχνίδι")
       : null,
-    el("button", { class: "btn ghost", onclick: () => actions.leaveRoom() }, "Leave"),
+    el("button", { class: "btn ghost", onclick: () => actions.leaveRoom() }, "Αποχώρηση"),
     s.error ? el("div", { class: "error-banner", text: s.error }) : null,
   ]);
 }
 
 function hostSettings(settings) {
-  // Host can tweak timers before start; sent via updateProfile-like message.
   const mk = (label, key, val, min, max) =>
     el("div", { class: "setting" }, [
       el("span", { class: "muted tiny", text: label }),
@@ -185,11 +208,11 @@ function hostSettings(settings) {
       }),
     ]);
   return el("details", { class: "settings" }, [
-    el("summary", { text: "Round timers (seconds)" }),
+    el("summary", { text: "⏱️ Χρόνοι γύρων (δευτερόλεπτα)" }),
     el("div", { class: "settings-grid" }, [
-      mk("Writing", "writingTimer", settings.writingTimer ?? 60, 15, 300),
-      mk("Drawing", "drawingTimer", settings.drawingTimer ?? 120, 30, 400),
-      mk("Guessing", "guessingTimer", settings.guessingTimer ?? 60, 15, 300),
+      mk("Γράψιμο", "writingTimer", settings.writingTimer ?? 60, 15, 300),
+      mk("Ζωγραφική", "drawingTimer", settings.drawingTimer ?? 120, 30, 400),
+      mk("Μάντεμα", "guessingTimer", settings.guessingTimer ?? 60, 15, 300),
     ]),
   ]);
 }
@@ -216,28 +239,29 @@ function timerBar(deadline) {
     const left = Math.max(0, (deadline - Date.now()) / 1000);
     fill.style.width = `${Math.min(100, (left / total) * 100)}%`;
     text.textContent = `${Math.ceil(left)}s`;
+    wrap.classList.toggle("low", left <= 10);
     if (left <= 0 && countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
   };
   tick();
-  if (countdownTimer) clearInterval(countdownTimer);
+  clearCountdown();
   countdownTimer = setInterval(tick, 250);
   return wrap;
 }
 
 function roundBadge(r) {
-  const labels = { write: "Round 1 · Write", draw: "Draw it!", guess: "Guess it!" };
-  return el("div", { class: "round-badge", text: `Round ${r.roundNumber}/${r.totalRounds} · ${labels[r.taskType] || ""}` });
+  const labels = { write: "✍️ Γράψε", draw: "🎨 Ζωγράφισε!", guess: "🤔 Μάντεψε!" };
+  return el("div", { class: "round-badge", text: `Γύρος ${r.roundNumber}/${r.totalRounds} · ${labels[r.taskType] || ""}` });
 }
 
 function writingScreen(s) {
   const r = s.round;
   let value = "";
+  const counter = el("span", { class: "muted tiny", text: `0/${MAX_TEXT}` });
   const ta = el("textarea", {
     class: "input textarea", maxlength: String(MAX_TEXT),
-    placeholder: "Write a weird sentence for someone else to draw…",
+    placeholder: "Γράψε μια παράξενη φράση για να τη ζωγραφίσει κάποιος…",
     oninput: (e) => { value = e.target.value; counter.textContent = `${value.length}/${MAX_TEXT}`; },
   });
-  const counter = el("span", { class: "muted tiny", text: `0/${MAX_TEXT}` });
   const submit = () => {
     actions.sendToHost({ t: C.SUBMIT_TEXT, assignmentId: r.assignmentId, text: value });
     store.set({ screen: "waiting", submitted: true });
@@ -245,9 +269,9 @@ function writingScreen(s) {
   return el("div", { class: "card round" }, [
     roundBadge(r),
     timerBar(r.deadline),
-    el("p", { class: "prompt-instr", text: "Write something funny and unexpected." }),
+    el("p", { class: "prompt-instr", text: "Γράψε κάτι αστείο κι απρόσμενο." }),
     ta, counter,
-    el("button", { class: "btn primary big", onclick: submit }, "Submit"),
+    el("button", { class: "btn primary big", onclick: submit }, "Υποβολή"),
   ]);
 }
 
@@ -256,7 +280,7 @@ function guessingScreen(s) {
   let value = "";
   const counter = el("span", { class: "muted tiny", text: `0/${MAX_TEXT}` });
   const inp = el("input", {
-    class: "input", maxlength: String(MAX_TEXT), placeholder: "What is this?",
+    class: "input", maxlength: String(MAX_TEXT), placeholder: "Τι είναι αυτό;",
     oninput: (e) => { value = e.target.value; counter.textContent = `${value.length}/${MAX_TEXT}`; },
   });
   const submit = () => {
@@ -266,12 +290,12 @@ function guessingScreen(s) {
   return el("div", { class: "card round" }, [
     roundBadge(r),
     timerBar(r.deadline),
-    el("p", { class: "prompt-instr", text: "What did they draw?" }),
+    el("p", { class: "prompt-instr", text: "Τι ζωγράφισαν;" }),
     (r.input && r.input.imageUrl)
-      ? el("img", { class: "drawing-view", src: r.input.imageUrl, alt: "drawing to guess" })
-      : el("div", { class: "muted", text: "(no drawing)" }),
+      ? el("img", { class: "drawing-view", src: r.input.imageUrl, alt: "ζωγραφιά προς μάντεμα" })
+      : el("div", { class: "muted center", text: "(καμία ζωγραφιά)" }),
     inp, counter,
-    el("button", { class: "btn primary big", onclick: submit }, "Submit guess"),
+    el("button", { class: "btn primary big", onclick: submit }, "Υπέβαλε μαντεψιά"),
   ]);
 }
 
@@ -282,15 +306,14 @@ function drawingScreen(s) {
     roundBadge(r),
     timerBar(r.deadline),
     el("div", { class: "prompt-chip" }, [
-      el("span", { class: "muted tiny", text: "DRAW THIS" }),
-      el("span", { class: "prompt-text", text: (r.input && r.input.text) || "(no prompt)" }),
+      el("span", { class: "muted tiny", text: "ΖΩΓΡΑΦΙΣΕ ΑΥΤΟ" }),
+      el("span", { class: "prompt-text", text: (r.input && r.input.text) || "(χωρίς φράση)" }),
     ]),
     canvasEl,
     toolbar(),
-    el("button", { class: "btn primary big", id: "submit-draw" }, "Submit drawing"),
+    el("button", { class: "btn primary big", id: "submit-draw" }, "Υποβολή ζωγραφιάς"),
   ]);
 
-  // Defer canvas init until it's in the DOM (needs layout size).
   requestAnimationFrame(() => {
     activeCanvas = new DrawingCanvas(canvasEl, { width: 1024, height: 768 });
     wireToolbar(wrap, activeCanvas);
@@ -311,7 +334,7 @@ function toolbar() {
     el("div", { class: "tool-row" }, [
       el("button", { class: "tool-btn", "data-tool": "pen", text: "✏️" }),
       el("button", { class: "tool-btn", "data-tool": "eraser", text: "🧽" }),
-      el("input", { class: "size-slider", type: "range", min: "1", max: "40", value: "6", "data-size": "1" }),
+      el("input", { class: "size-slider", type: "range", min: "1", max: "40", value: "6" }),
       el("button", { class: "tool-btn", "data-act": "undo", text: "↶" }),
       el("button", { class: "tool-btn", "data-act": "redo", text: "↷" }),
       el("button", { class: "tool-btn", "data-act": "clear", text: "🗑" }),
@@ -344,11 +367,12 @@ function wireToolbar(wrap, canvas) {
 // ---- WAITING ------------------------------------------------------------
 
 const WAIT_MSGS = [
-  "Masterpieces in progress…",
-  "Somebody is definitely overthinking this.",
-  "Hold tight, the chaos is loading.",
-  "No peeking at your neighbour's screen!",
-  "Great art takes (a little) time.",
+  "Γίνονται αριστουργήματα…",
+  "Κάποιος σίγουρα το παρασκέφτεται.",
+  "Κρατήσου, φορτώνει το χάος.",
+  "Μην κρυφοκοιτάς την οθόνη του διπλανού!",
+  "Η τέχνη θέλει (λίγο) χρόνο.",
+  "Υπομονή… έρχονται γέλια.",
 ];
 
 function waitingScreen(s) {
@@ -357,51 +381,186 @@ function waitingScreen(s) {
   const msg = WAIT_MSGS[(prog.submitted + (s.round ? s.round.roundNumber : 0)) % WAIT_MSGS.length];
   return el("div", { class: "card waiting" }, [
     el("div", { class: "spinner" }),
-    el("h2", { class: "screen-title", text: "Waiting for everyone…" }),
+    el("h2", { class: "screen-title", text: "Περιμένουμε τους υπόλοιπους…" }),
     el("p", { class: "muted", text: msg }),
     el("div", { class: "progress" }, [el("div", { class: "progress-fill", style: `width:${pct}%` })]),
-    el("p", { class: "big-count", text: `${prog.submitted} / ${prog.total} ready` }),
+    el("p", { class: "big-count", text: `${prog.submitted} / ${prog.total} έτοιμοι` }),
   ]);
 }
 
-// ---- REVEAL -------------------------------------------------------------
+// ===================  REVEAL  =====================================
+// Δύο τρόποι: "show" = αυτόματη cinematic παρουσίαση που παίζει μόνη της,
+//            "gallery" = ελεύθερη περιήγηση με reactions + κατέβασμα.
 
-let revealIndex = 0;
-
-function revealScreen(s) {
+function mountReveal(s) {
+  if (revealMode === "gallery") {
+    revealMounted = true;
+    return root.appendChild(galleryScreen(s));
+  }
+  // show mode
   const chains = s.reveal || [];
-  if (!chains.length) return el("div", { class: "card" }, [el("p", { text: "Nothing to reveal." })]);
-  revealIndex = Math.max(0, Math.min(revealIndex, chains.length - 1));
-  const chain = chains[revealIndex];
+  if (!chains.length) {
+    return root.appendChild(el("div", { class: "card" }, [el("p", { text: "Δεν υπάρχει τίποτα για αποκάλυψη." })]));
+  }
+  if (presentChainsRef !== chains || !presentSteps.length) {
+    presentChainsRef = chains;
+    presentSteps = buildSteps(chains);
+    presentIdx = 0;
+    presentPlaying = true;
+  }
+  revealMounted = true;
+  showStep();
+}
+
+function buildSteps(chains) {
+  const steps = [];
+  for (const chain of chains) {
+    steps.push({ kind: "title", chain });
+    chain.entries.forEach((entry, i) => steps.push({ kind: "entry", chain, entry, i }));
+  }
+  steps.push({ kind: "end" });
+  return steps;
+}
+
+function stepDuration(step) {
+  if (step.kind === "title") return 2100;
+  if (step.kind === "end") return 0;
+  return step.entry.type === "drawing" ? 4400 : 3400;
+}
+
+function showStep() {
+  if (presentTimer) { clearTimeout(presentTimer); presentTimer = null; }
+  presentIdx = Math.max(0, Math.min(presentIdx, presentSteps.length - 1));
+  const step = presentSteps[presentIdx];
+  root.innerHTML = "";
+  root.appendChild(renderShow(step));
+  if (step.kind === "end") {
+    confetti();
+    return;
+  }
+  if (presentPlaying) {
+    presentTimer = setTimeout(() => { presentIdx++; showStep(); }, stepDuration(step));
+  }
+}
+
+function presentControls() {
+  const totalChains = (presentChainsRef || []).length;
+  const cur = presentSteps[presentIdx];
+  const chainNo = cur && cur.chain ? cur.chain.index + 1 : totalChains;
+  const go = (d) => { presentIdx += d; showStep(); };
+  const toGallery = () => { if (presentTimer) clearTimeout(presentTimer); revealMode = "gallery"; revealMounted = false; render(store.get()); };
+  const togglePlay = () => { presentPlaying = !presentPlaying; showStep(); };
+  return el("div", { class: "show-controls" }, [
+    el("button", { class: "ctrl", title: "Προηγούμενο", onclick: () => go(-1) }, "⏮"),
+    el("button", { class: "ctrl big-ctrl", title: presentPlaying ? "Παύση" : "Συνέχεια", onclick: togglePlay }, presentPlaying ? "⏸" : "▶"),
+    el("button", { class: "ctrl", title: "Επόμενο", onclick: () => go(1) }, "⏭"),
+    el("span", { class: "show-count", text: cur && cur.kind !== "end" ? `Αλυσίδα ${chainNo}/${totalChains}` : "" }),
+    el("button", { class: "btn small ghost gallery-btn", onclick: toGallery }, "Δες όλες ▦"),
+  ]);
+}
+
+function renderShow(step) {
+  if (step.kind === "end") return renderEnd();
+
+  const totalChains = (presentChainsRef || []).length;
+
+  if (step.kind === "title") {
+    const c = step.chain;
+    return el("div", { class: "card reveal show" }, [
+      el("div", { class: "show-stage title-stage", key: presentIdx }, [
+        el("div", { class: "chain-num pop-in", text: `Αλυσίδα ${c.index + 1} / ${totalChains}` }),
+        c.originPlayer ? el("div", { class: "title-author pop-in delay1" }, [
+          avatar(c.originPlayer, 64),
+          el("p", { class: "muted", text: "ξεκίνησε από" }),
+          el("h2", { class: "author-name", text: c.originPlayer.nickname }),
+        ]) : null,
+      ]),
+      presentControls(),
+    ]);
+  }
+
+  // entry step
+  const e = step.entry;
+  const who = e.player ? e.player.nickname : "?";
+  const verb = e.type === "prompt" ? "έγραψε" : e.type === "drawing" ? "ζωγράφισε" : "μάντεψε";
+  const lead = e.i === 0 ? "Όλα ξεκίνησαν με…" : null;
+
+  const body = e.type === "drawing"
+    ? el("div", { class: "show-drawing-frame pop-in" }, [el("img", { class: "show-drawing", src: e.imageUrl, alt: "ζωγραφιά" })])
+    : el("div", { class: "show-bubble pop-in", text: e.textContent });
+
+  return el("div", { class: "card reveal show" }, [
+    el("div", { class: "show-stage", key: presentIdx }, [
+      lead ? el("p", { class: "show-lead fade-in", text: lead }) : null,
+      el("div", { class: "show-author slide-in" }, [
+        e.player ? avatar(e.player, 40) : null,
+        el("span", { class: "show-name", text: who }),
+        el("span", { class: "verb-chip", text: verb }),
+      ]),
+      body,
+    ]),
+    presentControls(),
+  ]);
+}
+
+function renderEnd() {
+  const isHost = store.get().isHost;
+  return el("div", { class: "card reveal end-card" }, [
+    logo("small"),
+    el("div", { class: "end-emoji bounce", text: "🎉" }),
+    el("h2", { class: "screen-title", text: "Τέλος!" }),
+    el("p", { class: "muted", text: "Ελπίζουμε να γελάσατε με την ψυχή σας." }),
+    el("div", { class: "reveal-actions" }, [
+      el("button", { class: "btn primary", onclick: () => { revealMode = "gallery"; revealMounted = false; render(store.get()); } }, "▦ Δες όλες τις αλυσίδες"),
+      el("button", { class: "btn", onclick: () => { presentIdx = 0; showStep(); } }, "🔁 Ξαναπαίξε την παρουσίαση"),
+      isHost
+        ? el("button", { class: "btn primary", onclick: () => actions.sendToHost({ t: C.PLAY_AGAIN }) }, "🎮 Νέο παιχνίδι")
+        : null,
+      el("button", { class: "btn ghost", onclick: () => actions.leaveRoom() }, "Αποχώρηση"),
+    ]),
+  ]);
+}
+
+// ---- gallery (manual browse) -------------------------------------------
+
+let galleryIndex = 0;
+
+function galleryScreen(s) {
+  const chains = s.reveal || [];
+  if (!chains.length) return el("div", { class: "card" }, [el("p", { text: "Δεν υπάρχει τίποτα." })]);
+  galleryIndex = Math.max(0, Math.min(galleryIndex, chains.length - 1));
+  const chain = chains[galleryIndex];
 
   const entries = el("div", { class: "reveal-entries" },
-    chain.entries.map((e) => revealEntry(chain, e)));
+    chain.entries.map((e) => galleryEntry(chain, e)));
 
   return el("div", { class: "card reveal" }, [
-    header(null, null),
+    el("div", { class: "lobby-head" }, [logo("small")]),
     el("div", { class: "reveal-nav" }, [
-      el("button", { class: "btn small", disabled: revealIndex === 0 || false, onclick: () => { revealIndex--; render(store.get()); } }, "‹ Prev"),
-      el("span", { class: "muted", text: `Chain ${revealIndex + 1} / ${chains.length}` }),
-      el("button", { class: "btn small", disabled: revealIndex === chains.length - 1 || false, onclick: () => { revealIndex++; render(store.get()); } }, "Next ›"),
+      el("button", { class: "btn small", disabled: galleryIndex === 0 || false, onclick: () => { galleryIndex--; render(store.get()); } }, "‹ Προηγ."),
+      el("span", { class: "muted", text: `Αλυσίδα ${galleryIndex + 1} / ${chains.length}` }),
+      el("button", { class: "btn small", disabled: galleryIndex === chains.length - 1 || false, onclick: () => { galleryIndex++; render(store.get()); } }, "Επόμ. ›"),
     ]),
     chain.originPlayer
-      ? el("p", { class: "muted tiny", text: `Started by ${chain.originPlayer.nickname}` })
+      ? el("p", { class: "muted tiny center", text: `Ξεκίνησε από ${chain.originPlayer.nickname}` })
       : null,
     entries,
     el("div", { class: "reveal-actions" }, [
-      el("button", { class: "btn", onclick: () => downloadChain(chain) }, "⬇ Download chain"),
+      el("button", { class: "btn", onclick: () => downloadChain(chain) }, "⬇ Κατέβασε"),
+      el("button", { class: "btn", onclick: () => { revealMode = "show"; revealMounted = false; presentIdx = 0; render(store.get()); } }, "▶ Παρουσίαση"),
       s.isHost
-        ? el("button", { class: "btn primary", onclick: () => actions.sendToHost({ t: C.PLAY_AGAIN }) }, "Play again")
+        ? el("button", { class: "btn primary", onclick: () => actions.sendToHost({ t: C.PLAY_AGAIN }) }, "🎮 Νέο παιχνίδι")
         : null,
-      el("button", { class: "btn ghost", onclick: () => actions.leaveRoom() }, "Leave"),
+      el("button", { class: "btn ghost", onclick: () => actions.leaveRoom() }, "Αποχώρηση"),
     ]),
   ]);
 }
 
-function revealEntry(chain, e) {
+function galleryEntry(chain, e) {
   const who = e.player ? e.player.nickname : "?";
+  const verb = e.type === "prompt" ? "έγραψε" : e.type === "drawing" ? "ζωγράφισε" : "μάντεψε";
   const body = e.type === "drawing"
-    ? el("img", { class: "reveal-img", src: e.imageUrl, alt: "drawing" })
+    ? el("img", { class: "reveal-img", src: e.imageUrl, alt: "ζωγραφιά" })
     : el("div", { class: "reveal-text", text: e.textContent });
   const reactRow = el("div", { class: "react-row" },
     REACTIONS.map((emoji) => {
@@ -414,14 +573,14 @@ function revealEntry(chain, e) {
   return el("div", { class: "reveal-entry" }, [
     el("div", { class: "reveal-who" }, [
       e.player ? avatar(e.player, 28) : null,
-      el("span", { class: "tiny", text: `${who} · ${e.type}` }),
+      el("span", { class: "tiny", text: `${who} · ${verb}` }),
     ]),
     body,
     reactRow,
   ]);
 }
 
-// Compose the chain into one tall PNG and download it.
+// Συνθέτει την αλυσίδα σε μία εικόνα PNG και την κατεβάζει.
 async function downloadChain(chain) {
   const W = 720, pad = 24, gap = 18;
   const blocks = [];
@@ -432,7 +591,7 @@ async function downloadChain(chain) {
       blocks.push({ kind: "img", img, h: h + 26 });
     } else {
       const lines = wrapText(e.textContent || "", 40);
-      blocks.push({ kind: "text", text: e.textContent || "", lines, h: 26 + lines.length * 28 + 14 });
+      blocks.push({ kind: "text", lines, h: 26 + lines.length * 28 + 14 });
     }
   }
   const total = pad * 2 + blocks.reduce((a, b) => a + b.h + gap, 0) + 40;
@@ -441,10 +600,9 @@ async function downloadChain(chain) {
   const ctx = cv.getContext("2d");
   ctx.fillStyle = "#fdf6ec"; ctx.fillRect(0, 0, W, total);
   ctx.fillStyle = "#7c3aed"; ctx.font = "bold 26px system-ui, sans-serif";
-  ctx.fillText("Doodle Relay", pad, 38);
+  ctx.fillText("Tinaftore", pad, 40);
   let y = 64;
   for (const b of blocks) {
-    ctx.fillStyle = "#6b7280"; ctx.font = "13px system-ui, sans-serif";
     if (b.kind === "img") {
       ctx.drawImage(b.img, pad, y, W - pad * 2, b.h - 26);
       y += b.h + gap;
@@ -456,7 +614,7 @@ async function downloadChain(chain) {
   }
   const a = document.createElement("a");
   a.href = cv.toDataURL("image/png");
-  a.download = `doodle-relay-chain-${chain.index + 1}.png`;
+  a.download = `tinaftore-alysida-${chain.index + 1}.png`;
   a.click();
 }
 
@@ -483,17 +641,18 @@ function wrapText(text, max) {
 
 function connectingScreen(s) {
   return el("div", { class: "card waiting" }, [
+    logo("small"),
     el("div", { class: "spinner" }),
-    el("h2", { class: "screen-title", text: "Connecting…" }),
-    el("p", { class: "muted", text: s.roomCode ? `Room ${s.roomCode}` : "Setting up peer connection" }),
+    el("h2", { class: "screen-title", text: "Σύνδεση…" }),
+    el("p", { class: "muted", text: s.roomCode ? `Δωμάτιο ${s.roomCode}` : "Στήνουμε τη σύνδεση peer-to-peer" }),
   ]);
 }
 
 function hostClosedScreen() {
   return el("div", { class: "card waiting" }, [
-    el("h2", { class: "screen-title", text: "Host left" }),
-    el("p", { class: "muted", text: "The host closed the room. Trying to reconnect…" }),
-    el("button", { class: "btn", onclick: () => actions.leaveRoom() }, "Back to home"),
+    el("h2", { class: "screen-title", text: "Ο host αποχώρησε" }),
+    el("p", { class: "muted", text: "Έκλεισε το δωμάτιο. Προσπαθούμε επανασύνδεση…" }),
+    el("button", { class: "btn", onclick: () => actions.leaveRoom() }, "Πίσω στην αρχή"),
   ]);
 }
 

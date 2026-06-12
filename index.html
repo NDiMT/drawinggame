@@ -1,21 +1,22 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="el">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#7c3aed" />
-  <title>Doodle Relay — draw-and-guess party game</title>
-  <meta name="description" content="A peer-to-peer write / draw / guess party game. Create a room, share the 6-digit code, play on any phone." />
+  <title>Tinaftore — γράψε, ζωγράφισε, μάντεψε!</title>
+  <meta name="description" content="Tinaftore: το party παιχνίδι όπου γράφεις μια φράση, κάποιος τη ζωγραφίζει, κάποιος άλλος μαντεύει τι είναι. Φτιάξε δωμάτιο, μοίρασε τον 6ψήφιο κωδικό, παίξτε από το κινητό." />
   <link rel="stylesheet" href="./styles.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>" />
+  <link rel="icon" href="./assets/logo.png" />
+  <link rel="apple-touch-icon" href="./assets/logo.png" />
 </head>
 <body>
   <div id="bg-blobs" aria-hidden="true"></div>
   <main id="app"></main>
-  <footer class="app-footer">Doodle Relay · peer-to-peer, no servers · built for mobile</footer>
+  <footer class="app-footer">Tinaftore · peer-to-peer, χωρίς servers · φτιαγμένο για κινητό</footer>
 
-  <!-- PeerJS handles only the WebRTC connection handshake (free public broker).
-       Game data flows directly peer-to-peer; the host browser is authoritative. -->
+  <!-- Το PeerJS χειρίζεται μόνο το WebRTC handshake (δωρεάν public broker).
+       Τα δεδομένα του παιχνιδιού πάνε peer-to-peer· ο host είναι authoritative. -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script type="module" src="./js/main.js"></script>
 </body>

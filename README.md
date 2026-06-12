@@ -1,4 +1,4 @@
-# 🎨 Doodle Relay
+# 🎨 Tinaftore
 
 A peer-to-peer **write → draw → guess** party game for phones, inspired by the
 classic "telephone" game. Everyone writes a sentence, someone draws it, someone
