@@ -17,6 +17,7 @@ let root;
 let statusEl;
 let activeCanvas = null;
 let countdownTimer = null;
+let mountedRoundId = null;      // assignmentId της οθόνης γύρου που είναι ήδη mounted
 
 // ---- reveal view state (παρουσίαση = host-driven, gallery = τοπική) ----
 let revealMode = "show";        // "show" (συγχρονισμένη παρουσίαση) | "gallery"
@@ -45,8 +46,14 @@ function teardownReveal() {
 }
 
 function render(s) {
-  if (s.hostClosed) { teardownReveal(); clearCountdown(); activeCanvas = null; root.innerHTML = ""; return root.appendChild(hostClosedScreen()); }
-  if (s.connecting) { teardownReveal(); clearCountdown(); activeCanvas = null; root.innerHTML = ""; return root.appendChild(connectingScreen(s)); }
+  if (s.hostClosed) { teardownReveal(); clearCountdown(); activeCanvas = null; mountedRoundId = null; root.innerHTML = ""; return root.appendChild(hostClosedScreen()); }
+  if (s.connecting) { teardownReveal(); clearCountdown(); activeCanvas = null; mountedRoundId = null; root.innerHTML = ""; return root.appendChild(connectingScreen(s)); }
+
+  // CRITICAL: keep the active writing/drawing/guessing screen mounted across
+  // incidental store updates (e.g. "3/5 ready" progress) — otherwise we'd wipe
+  // the user's typed text or canvas strokes mid-round.
+  if (s.screen === "round" && s.round && s.round.assignmentId === mountedRoundId) return;
+  if (s.screen !== "round") mountedRoundId = null;
 
   if (s.screen !== "reveal") teardownReveal();
 
@@ -57,7 +64,7 @@ function render(s) {
   switch (s.screen) {
     case "home": return root.appendChild(homeScreen(s));
     case "lobby": return root.appendChild(lobbyScreen(s));
-    case "round": return root.appendChild(roundScreen(s));
+    case "round": mountedRoundId = s.round ? s.round.assignmentId : null; return root.appendChild(roundScreen(s));
     case "waiting": return root.appendChild(waitingScreen(s));
     case "reveal": return mountReveal(s);
     default: return root.appendChild(homeScreen(s));
@@ -514,7 +521,6 @@ function renderEnd(s) {
     logo("small"),
     el("div", { class: "end-emoji bounce", text: "🎉" }),
     el("h2", { class: "screen-title", text: "Τέλος!" }),
-    el("p", { class: "muted", text: "Ελπίζουμε να γελάσατε με την ψυχή σας." }),
     el("div", { class: "reveal-actions" }, [
       el("button", { class: "btn primary", onclick: () => { revealMode = "gallery"; render(store.get()); } }, "▦ Δες όλες τις αλυσίδες"),
       s.isHost

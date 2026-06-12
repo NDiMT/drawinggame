@@ -216,25 +216,25 @@ body {
 .show-drawing-frame { background: #fff; border: 3px solid var(--line); border-radius: 18px; padding: 7px; box-shadow: var(--hard); max-width: 100%; transform: rotate(-1deg); }
 .show-drawing { display: block; width: 100%; max-height: 46dvh; object-fit: contain; border-radius: 12px; }
 
-.show-controls { display: flex; align-items: center; justify-content: center; gap: 10px; padding-top: 12px; border-top: 3px dashed rgba(28,21,48,.18); }
-.ctrl { width: 48px; height: 48px; border-radius: 50%; border: 3px solid var(--line); background: #fff; font-size: 18px; cursor: pointer; box-shadow: 3px 3px 0 var(--line); transition: transform .08s, box-shadow .08s; }
+.show-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 10px; padding-top: 12px; margin-top: 4px; border-top: 3px dashed rgba(28,21,48,.18); }
+.ctrl { width: 46px; height: 46px; border-radius: 50%; border: 3px solid var(--line); background: #fff; font-size: 18px; cursor: pointer; box-shadow: 3px 3px 0 var(--line); transition: transform .08s, box-shadow .08s; flex: none; }
 .ctrl:active { transform: translate(3px,3px); box-shadow: 0 0 0 var(--line); }
-.big-ctrl { width: 58px; height: 58px; font-size: 22px; background: var(--primary); color: #fff; }
+.big-ctrl { width: 56px; height: 56px; font-size: 22px; background: var(--primary); color: #fff; }
 .show-transport { display: flex; align-items: center; gap: 10px; }
 .host-drives { font-size: 13px; font-weight: 700; color: var(--muted); font-family: var(--display); background: #fdf7ff; border: 2px dashed var(--line); padding: 6px 12px; border-radius: 999px; }
-.show-count { font-size: 13px; font-weight: 700; color: var(--muted); margin-left: 4px; font-family: var(--display); }
-.gallery-btn { margin-left: auto; }
+.show-count { flex-basis: 100%; text-align: center; font-size: 13px; font-weight: 700; color: var(--muted); font-family: var(--display); order: 3; }
+.gallery-btn { order: 4; }
 
-/* connection status pill */
+/* connection status pill — top-right corner so it never covers the logo */
 .status-pill {
-  position: fixed; top: calc(env(safe-area-inset-top) + 8px); left: 50%; transform: translateX(-50%);
-  z-index: 90; font-size: 12px; font-weight: 700; font-family: var(--display);
-  background: #fff; color: var(--ink); border: 3px solid var(--line); border-radius: 999px;
-  padding: 5px 12px; box-shadow: 3px 3px 0 var(--line); white-space: nowrap;
+  position: fixed; top: calc(env(safe-area-inset-top) + 6px); right: 8px; left: auto;
+  z-index: 90; font-size: 11px; font-weight: 700; font-family: var(--display);
+  background: #fff; color: var(--ink); border: 2px solid var(--line); border-radius: 999px;
+  padding: 4px 10px; box-shadow: 2px 2px 0 var(--line); white-space: nowrap;
 }
 .status-pill.warn { background: #fff7d6; }
 .status-pill.bad { background: #ffe1e1; animation: nudge .6s ease infinite; }
-@keyframes nudge { 0%,100% { transform: translateX(-50%); } 50% { transform: translateX(-50%) translateY(-2px); } }
+@keyframes nudge { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
 
 /* end card */
 .end-card { text-align: center; align-items: center; }
@@ -265,7 +265,7 @@ body {
 .react-btn:active { transform: translate(2px,2px); box-shadow: 0 0 0 var(--line); }
 .react-count { font-size: 12px; font-weight: 800; margin-left: 3px; color: var(--primary); }
 .reveal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.reveal-actions .btn { flex: 1; min-width: 130px; }
+.reveal-actions .btn { flex: 1 1 calc(50% - 8px); min-width: 0; }
 
 /* ---- misc ---- */
 .error-banner { background: #fff0f0; color: #b91c1c; border: 3px solid var(--line); border-radius: 14px; padding: 10px; font-size: 14px; text-align: center; font-weight: 700; box-shadow: var(--hard-sm); }
