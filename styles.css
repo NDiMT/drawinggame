@@ -27,7 +27,7 @@ body {
   min-height: 100dvh;
   display: flex; flex-direction: column; align-items: center;
   /* Άνετο κενό πάνω & κάτω — το περιεχόμενο δεν ακουμπά ποτέ τις άκρες. */
-  padding: calc(env(safe-area-inset-top) + 26px) 14px calc(env(safe-area-inset-bottom) + 44px);
+  padding: calc(env(safe-area-inset-top) + 36px) 14px calc(env(safe-area-inset-bottom) + 52px);
   overflow-x: hidden; overflow-y: auto;
 }
 
