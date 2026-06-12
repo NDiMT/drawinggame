@@ -3,7 +3,7 @@
 // it without any signalling server of our own (PeerJS's free broker handles
 // only the connection handshake; game data flows peer-to-peer).
 
-import { PEER_PREFIX } from "./protocol.js";
+import { PEER_PREFIX } from "./protocol.js?v=10";
 
 /* global Peer */
 

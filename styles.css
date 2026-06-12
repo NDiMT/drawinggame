@@ -27,7 +27,7 @@ body {
   min-height: 100dvh;
   display: flex; flex-direction: column; align-items: center;
   /* Άνετο κενό πάνω & κάτω — το περιεχόμενο δεν ακουμπά ποτέ τις άκρες. */
-  padding: calc(env(safe-area-inset-top) + 30px) 14px calc(env(safe-area-inset-bottom) + 30px);
+  padding: calc(env(safe-area-inset-top) + 26px) 14px calc(env(safe-area-inset-bottom) + 44px);
   overflow-x: hidden; overflow-y: auto;
 }
 
@@ -73,7 +73,7 @@ body {
 
 .brand { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .logo-img { display: block; width: auto; }
-.logo-img.big { width: min(82%, 340px); filter: drop-shadow(0 6px 0 rgba(28,21,48,.18)); animation: logoIn .55s cubic-bezier(.2,.9,.3,1.6); }
+.logo-img.big { width: min(82%, 340px); animation: logoIn .55s cubic-bezier(.2,.9,.3,1.6); }
 .logo-img.small { width: 150px; }
 
 /* Home: logo poses like a sticker at the top of the white box — half of it

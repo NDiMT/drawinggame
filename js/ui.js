@@ -2,13 +2,13 @@
 // ενεργή οθόνη. Στέλνει ενέργειες παίκτη μέσω actions.js. Καθαρό view layer —
 // δεν αποφασίζει ποτέ state, απλώς δείχνει ό,τι στέλνει ο host.
 
-import { store } from "./store.js";
-import { actions } from "./actions.js";
-import { C, TASK, MIN_PLAYERS, MAX_TEXT } from "./protocol.js";
-import { el, AVATAR_COLORS, randomColor } from "./util.js";
-import { DrawingCanvas } from "./canvas.js";
-import { confetti } from "./confetti.js";
-import * as music from "./music.js";
+import { store } from "./store.js?v=10";
+import { actions } from "./actions.js?v=10";
+import { C, TASK, MIN_PLAYERS, MAX_TEXT } from "./protocol.js?v=10";
+import { el, AVATAR_COLORS, randomColor } from "./util.js?v=10";
+import { DrawingCanvas } from "./canvas.js?v=10";
+import { confetti } from "./confetti.js?v=10";
+import * as music from "./music.js?v=10";
 
 const REACTIONS = ["👍", "😂", "😮", "❤️", "🔥", "👏"];
 const LOGO_SRC = "./assets/logo.png?v=2";
@@ -527,7 +527,7 @@ function renderEnd(s) {
         ? el("button", { class: "btn", onclick: () => actions.sendToHost({ t: C.PRESENT_CONTROL, action: "restart" }) }, "🔁 Ξανά η παρουσίαση")
         : null,
       s.isHost
-        ? el("button", { class: "btn primary", onclick: () => actions.sendToHost({ t: C.PLAY_AGAIN }) }, "🎮 Νέο παιχνίδι")
+        ? el("button", { class: "btn primary", onclick: () => actions.sendToHost({ t: C.PLAY_AGAIN }) }, "🆕 Νέο παιχνίδι")
         : null,
       el("button", { class: "btn ghost", onclick: () => actions.leaveRoom() }, "Αποχώρηση"),
     ]),
@@ -562,7 +562,7 @@ function galleryScreen(s) {
       el("button", { class: "btn", onclick: () => downloadChain(chain) }, "⬇ Κατέβασε"),
       el("button", { class: "btn", onclick: () => { revealMode = "show"; render(store.get()); } }, "▶ Παρουσίαση"),
       s.isHost
-        ? el("button", { class: "btn primary", onclick: () => actions.sendToHost({ t: C.PLAY_AGAIN }) }, "🎮 Νέο παιχνίδι")
+        ? el("button", { class: "btn primary", onclick: () => actions.sendToHost({ t: C.PLAY_AGAIN }) }, "🆕 Νέο παιχνίδι")
         : null,
       el("button", { class: "btn ghost", onclick: () => actions.leaveRoom() }, "Αποχώρηση"),
     ]),
