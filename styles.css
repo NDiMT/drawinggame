@@ -70,8 +70,17 @@ body {
 
 .brand { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .logo-img { display: block; width: auto; }
-.logo-img.big { width: min(82%, 360px); filter: drop-shadow(0 6px 0 rgba(28,21,48,.18)); animation: logoIn .55s cubic-bezier(.2,.9,.3,1.6); }
-.logo-img.small { width: 138px; }
+.logo-img.big { width: min(82%, 340px); filter: drop-shadow(0 6px 0 rgba(28,21,48,.18)); animation: logoIn .55s cubic-bezier(.2,.9,.3,1.6); }
+.logo-img.small { width: 150px; }
+
+/* Home: logo poses like a sticker at the top of the white box — half of it
+   sits outside the card, with breathing room above and below. */
+.card.home { overflow: visible; margin-top: 96px; }
+.home .brand { margin-bottom: 8px; }
+.home .logo-img.big {
+  width: min(86%, 330px);
+  margin: -118px auto 20px;   /* pull up so ~half is outside + gap below */
+}
 @keyframes logoIn { from { transform: scale(.5) rotate(-8deg); opacity: 0; } 70% { transform: scale(1.06) rotate(3deg); } to { transform: scale(1) rotate(0); opacity: 1; } }
 .tagline { color: var(--ink); font-weight: 700; font-size: 15px; margin: 2px 0 4px; font-family: var(--display); }
 
