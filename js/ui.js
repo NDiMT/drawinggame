@@ -153,14 +153,13 @@ function homeScreen(s) {
     el("label", { class: "field-label", text: "Διάλεξε χρώμα" }),
     swatches,
     el("div", { class: "divider" }),
-    el("button", { class: "btn primary big", onclick: create }, "🎮 Φτιάξε δωμάτιο"),
+    el("button", { class: "btn primary big", onclick: create }, "✏️ Φτιάξε δωμάτιο"),
     el("div", { class: "or", text: "ή μπες με κωδικό" }),
     el("div", { class: "row" }, [
       codeInput,
       el("button", { class: "btn", onclick: join }, "Μπες"),
     ]),
     s.error ? el("div", { class: "error-banner", text: s.error }) : null,
-    el("p", { class: "tiny muted center", text: "Ιδανικό για 3+ φίλους — στο ίδιο WiFi ή από παντού." }),
   ]);
 }
 
