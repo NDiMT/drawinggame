@@ -8,38 +8,40 @@ import { C, TASK, MIN_PLAYERS, MAX_TEXT } from "./protocol.js";
 import { el, AVATAR_COLORS, randomColor } from "./util.js";
 import { DrawingCanvas } from "./canvas.js";
 import { confetti } from "./confetti.js";
+import * as music from "./music.js";
 
 const REACTIONS = ["👍", "😂", "😮", "❤️", "🔥", "👏"];
 const LOGO_SRC = "./assets/logo.png";
 
 let root;
+let statusEl;
 let activeCanvas = null;
 let countdownTimer = null;
 
-// ---- presentation (cinematic reveal) state ----
-let revealMode = "show";        // "show" (auto-play) | "gallery" (περιήγηση)
-let revealMounted = false;
-let presentSteps = [];
-let presentIdx = 0;
-let presentPlaying = true;
-let presentTimer = null;
+// ---- reveal view state (παρουσίαση = host-driven, gallery = τοπική) ----
+let revealMode = "show";        // "show" (συγχρονισμένη παρουσίαση) | "gallery"
+let presentSteps = [];          // τοπικό descriptor βημάτων (από τα reveal data)
 let presentChainsRef = null;
+let endConfettiFired = false;
 
 export function initUI() {
   root = document.getElementById("app");
+  statusEl = document.getElementById("status");
   store.subscribe(render);
+  store.subscribe(updateStatus);
   render(store.get());
+  updateStatus(store.get());
 }
 
 function clearCountdown() {
   if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
 }
 function teardownReveal() {
-  if (presentTimer) { clearTimeout(presentTimer); presentTimer = null; }
   presentSteps = [];
   presentChainsRef = null;
-  revealMounted = false;
   revealMode = "show";
+  endConfettiFired = false;
+  music.stop();
 }
 
 function render(s) {
@@ -47,9 +49,6 @@ function render(s) {
   if (s.connecting) { teardownReveal(); clearCountdown(); activeCanvas = null; root.innerHTML = ""; return root.appendChild(connectingScreen(s)); }
 
   if (s.screen !== "reveal") teardownReveal();
-  // Η αυτόματη παρουσίαση οδηγεί μόνη της το DOM — αγνόησε ασήμαντα store updates
-  // (π.χ. reactions) ώστε να μην ξεκινά απ' την αρχή.
-  if (s.screen === "reveal" && revealMounted && revealMode === "show") return;
 
   clearCountdown();
   activeCanvas = null;
@@ -63,6 +62,23 @@ function render(s) {
     case "reveal": return mountReveal(s);
     default: return root.appendChild(homeScreen(s));
   }
+}
+
+// ---- connection status pill --------------------------------------------
+
+function updateStatus(s) {
+  if (!statusEl) return;
+  if (!s.roomCode || s.screen === "home") { statusEl.hidden = true; return; }
+  let dot = "🟢", text = "Συνδεδεμένο", cls = "ok";
+  if (s.hostClosed) { dot = "🔴"; text = "Χάθηκε ο host"; cls = "bad"; }
+  else if (s.isHost) { dot = "🟢"; text = "Host"; cls = "ok"; }
+  else if (s.connStatus === "connecting") { dot = "🟡"; text = "Σύνδεση…"; cls = "warn"; }
+  else if (s.connStatus === "reconnecting") { dot = "🟠"; text = "Επανασύνδεση…"; cls = "warn"; }
+  else if (s.connStatus === "offline") { dot = "🔴"; text = "Εκτός σύνδεσης"; cls = "bad"; }
+  else if (s.connStatus === "connected") { dot = "🟢"; text = "Συνδεδεμένο"; cls = "ok"; }
+  statusEl.hidden = false;
+  statusEl.className = `status-pill ${cls}`;
+  statusEl.textContent = `${dot} ${text}`;
 }
 
 // ---- helpers ------------------------------------------------------------
@@ -393,11 +409,8 @@ function waitingScreen(s) {
 //            "gallery" = ελεύθερη περιήγηση με reactions + κατέβασμα.
 
 function mountReveal(s) {
-  if (revealMode === "gallery") {
-    revealMounted = true;
-    return root.appendChild(galleryScreen(s));
-  }
-  // show mode
+  if (revealMode === "gallery") return root.appendChild(galleryScreen(s));
+
   const chains = s.reveal || [];
   if (!chains.length) {
     return root.appendChild(el("div", { class: "card" }, [el("p", { text: "Δεν υπάρχει τίποτα για αποκάλυψη." })]));
@@ -405,11 +418,19 @@ function mountReveal(s) {
   if (presentChainsRef !== chains || !presentSteps.length) {
     presentChainsRef = chains;
     presentSteps = buildSteps(chains);
-    presentIdx = 0;
-    presentPlaying = true;
   }
-  revealMounted = true;
-  showStep();
+  const present = s.present || { index: 0, playing: true };
+  const idx = Math.max(0, Math.min(present.index, presentSteps.length - 1));
+  const step = presentSteps[idx];
+
+  music.start(); // αστεία μουσική κατά την παρουσίαση (αν δεν έχει γίνει mute)
+
+  if (step.kind === "end") {
+    if (!endConfettiFired) { endConfettiFired = true; confetti(); }
+    return root.appendChild(renderEnd(s));
+  }
+  endConfettiFired = false;
+  root.appendChild(renderShow(step, idx, present.playing, s.isHost));
 }
 
 function buildSteps(chains) {
@@ -422,52 +443,39 @@ function buildSteps(chains) {
   return steps;
 }
 
-function stepDuration(step) {
-  if (step.kind === "title") return 2100;
-  if (step.kind === "end") return 0;
-  return step.entry.type === "drawing" ? 4400 : 3400;
-}
-
-function showStep() {
-  if (presentTimer) { clearTimeout(presentTimer); presentTimer = null; }
-  presentIdx = Math.max(0, Math.min(presentIdx, presentSteps.length - 1));
-  const step = presentSteps[presentIdx];
-  root.innerHTML = "";
-  root.appendChild(renderShow(step));
-  if (step.kind === "end") {
-    confetti();
-    return;
-  }
-  if (presentPlaying) {
-    presentTimer = setTimeout(() => { presentIdx++; showStep(); }, stepDuration(step));
-  }
-}
-
-function presentControls() {
+// Τα κουμπιά ελέγχου οδηγούν τον host (συγχρονισμένη παρουσίαση για όλους).
+function presentControls(idx, playing, isHost) {
   const totalChains = (presentChainsRef || []).length;
-  const cur = presentSteps[presentIdx];
+  const cur = presentSteps[idx];
   const chainNo = cur && cur.chain ? cur.chain.index + 1 : totalChains;
-  const go = (d) => { presentIdx += d; showStep(); };
-  const toGallery = () => { if (presentTimer) clearTimeout(presentTimer); revealMode = "gallery"; revealMounted = false; render(store.get()); };
-  const togglePlay = () => { presentPlaying = !presentPlaying; showStep(); };
+  const ctl = (action) => () => actions.sendToHost({ t: C.PRESENT_CONTROL, action });
+  const toGallery = () => { revealMode = "gallery"; render(store.get()); };
+  const musicBtn = el("button", { class: "ctrl", title: "Μουσική" }, music.isEnabled() ? "🔊" : "🔇");
+  musicBtn.addEventListener("click", () => { const on = music.toggle(); musicBtn.textContent = on ? "🔊" : "🔇"; });
+
+  const transport = isHost
+    ? el("div", { class: "show-transport" }, [
+        el("button", { class: "ctrl", title: "Προηγούμενο", onclick: ctl("prev") }, "⏮"),
+        el("button", { class: "ctrl big-ctrl", title: playing ? "Παύση" : "Συνέχεια", onclick: ctl(playing ? "pause" : "play") }, playing ? "⏸" : "▶"),
+        el("button", { class: "ctrl", title: "Επόμενο", onclick: ctl("next") }, "⏭"),
+      ])
+    : el("span", { class: "host-drives", text: "🎬 Ο host οδηγεί" });
+
   return el("div", { class: "show-controls" }, [
-    el("button", { class: "ctrl", title: "Προηγούμενο", onclick: () => go(-1) }, "⏮"),
-    el("button", { class: "ctrl big-ctrl", title: presentPlaying ? "Παύση" : "Συνέχεια", onclick: togglePlay }, presentPlaying ? "⏸" : "▶"),
-    el("button", { class: "ctrl", title: "Επόμενο", onclick: () => go(1) }, "⏭"),
+    transport,
     el("span", { class: "show-count", text: cur && cur.kind !== "end" ? `Αλυσίδα ${chainNo}/${totalChains}` : "" }),
+    musicBtn,
     el("button", { class: "btn small ghost gallery-btn", onclick: toGallery }, "Δες όλες ▦"),
   ]);
 }
 
-function renderShow(step) {
-  if (step.kind === "end") return renderEnd();
-
+function renderShow(step, idx, playing, isHost) {
   const totalChains = (presentChainsRef || []).length;
 
   if (step.kind === "title") {
     const c = step.chain;
     return el("div", { class: "card reveal show" }, [
-      el("div", { class: "show-stage title-stage", key: presentIdx }, [
+      el("div", { class: "show-stage title-stage" }, [
         el("div", { class: "chain-num pop-in", text: `Αλυσίδα ${c.index + 1} / ${totalChains}` }),
         c.originPlayer ? el("div", { class: "title-author pop-in delay1" }, [
           avatar(c.originPlayer, 64),
@@ -475,11 +483,10 @@ function renderShow(step) {
           el("h2", { class: "author-name", text: c.originPlayer.nickname }),
         ]) : null,
       ]),
-      presentControls(),
+      presentControls(idx, playing, isHost),
     ]);
   }
 
-  // entry step
   const e = step.entry;
   const who = e.player ? e.player.nickname : "?";
   const verb = e.type === "prompt" ? "έγραψε" : e.type === "drawing" ? "ζωγράφισε" : "μάντεψε";
@@ -490,7 +497,7 @@ function renderShow(step) {
     : el("div", { class: "show-bubble pop-in", text: e.textContent });
 
   return el("div", { class: "card reveal show" }, [
-    el("div", { class: "show-stage", key: presentIdx }, [
+    el("div", { class: "show-stage" }, [
       lead ? el("p", { class: "show-lead fade-in", text: lead }) : null,
       el("div", { class: "show-author slide-in" }, [
         e.player ? avatar(e.player, 40) : null,
@@ -499,21 +506,22 @@ function renderShow(step) {
       ]),
       body,
     ]),
-    presentControls(),
+    presentControls(idx, playing, isHost),
   ]);
 }
 
-function renderEnd() {
-  const isHost = store.get().isHost;
+function renderEnd(s) {
   return el("div", { class: "card reveal end-card" }, [
     logo("small"),
     el("div", { class: "end-emoji bounce", text: "🎉" }),
     el("h2", { class: "screen-title", text: "Τέλος!" }),
     el("p", { class: "muted", text: "Ελπίζουμε να γελάσατε με την ψυχή σας." }),
     el("div", { class: "reveal-actions" }, [
-      el("button", { class: "btn primary", onclick: () => { revealMode = "gallery"; revealMounted = false; render(store.get()); } }, "▦ Δες όλες τις αλυσίδες"),
-      el("button", { class: "btn", onclick: () => { presentIdx = 0; showStep(); } }, "🔁 Ξαναπαίξε την παρουσίαση"),
-      isHost
+      el("button", { class: "btn primary", onclick: () => { revealMode = "gallery"; render(store.get()); } }, "▦ Δες όλες τις αλυσίδες"),
+      s.isHost
+        ? el("button", { class: "btn", onclick: () => actions.sendToHost({ t: C.PRESENT_CONTROL, action: "restart" }) }, "🔁 Ξανά η παρουσίαση")
+        : null,
+      s.isHost
         ? el("button", { class: "btn primary", onclick: () => actions.sendToHost({ t: C.PLAY_AGAIN }) }, "🎮 Νέο παιχνίδι")
         : null,
       el("button", { class: "btn ghost", onclick: () => actions.leaveRoom() }, "Αποχώρηση"),
@@ -547,7 +555,7 @@ function galleryScreen(s) {
     entries,
     el("div", { class: "reveal-actions" }, [
       el("button", { class: "btn", onclick: () => downloadChain(chain) }, "⬇ Κατέβασε"),
-      el("button", { class: "btn", onclick: () => { revealMode = "show"; revealMounted = false; presentIdx = 0; render(store.get()); } }, "▶ Παρουσίαση"),
+      el("button", { class: "btn", onclick: () => { revealMode = "show"; render(store.get()); } }, "▶ Παρουσίαση"),
       s.isHost
         ? el("button", { class: "btn primary", onclick: () => actions.sendToHost({ t: C.PLAY_AGAIN }) }, "🎮 Νέο παιχνίδι")
         : null,

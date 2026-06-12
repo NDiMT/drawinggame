@@ -41,6 +41,7 @@ function handleServerMessage(msg) {
         patch.screen = "lobby";
         patch.round = null;
         patch.reveal = null;
+        patch.present = null;
       } else if (room.status === STATUS.PLAYING && (s.screen === "lobby" || s.screen === "home")) {
         patch.screen = "waiting";
       }
@@ -66,7 +67,11 @@ function handleServerMessage(msg) {
       break;
     }
     case S.REVEAL_STARTED: {
-      store.set({ screen: "reveal", reveal: msg.chains, round: null });
+      store.set({ screen: "reveal", reveal: msg.chains, round: null, present: { index: 0, playing: true } });
+      break;
+    }
+    case S.PRESENT_STEP: {
+      store.set({ screen: "reveal", present: { index: msg.index, playing: msg.playing } });
       break;
     }
     case S.REACTION_NEW: {
@@ -95,7 +100,7 @@ function handleServerMessage(msg) {
       break;
     }
     case S.HOST_CLOSED: {
-      store.set({ hostClosed: true });
+      store.set({ hostClosed: true, connStatus: "offline" });
       break;
     }
   }
@@ -123,7 +128,7 @@ function saveSnapshot(snap) {
 async function startHost(code, profile, restoreSnap = null) {
   role = "host";
   myProfile = profile;
-  store.set({ connecting: true, roomCode: code, isHost: true, hostClosed: false, error: null });
+  store.set({ connecting: true, roomCode: code, isHost: true, hostClosed: false, error: null, connStatus: "connecting" });
 
   hostNet = new HostNet(code);
   engine = new GameEngine({
@@ -141,9 +146,10 @@ async function startHost(code, profile, restoreSnap = null) {
   } catch (err) {
     store.set({ connecting: false });
     if (err.message === "CODE_TAKEN") return startHost(randomCode(), profile);
-    store.set({ error: "Could not open room. Check your connection." });
+    store.set({ error: "Δεν άνοιξε το δωμάτιο. Έλεγξε τη σύνδεσή σου.", connStatus: "offline" });
     return;
   }
+  store.set({ connStatus: "host" });
 
   if (restoreSnap) {
     engine.restore(restoreSnap);
@@ -170,26 +176,26 @@ async function startHost(code, profile, restoreSnap = null) {
 async function startClient(code, profile) {
   role = "client";
   myProfile = profile;
-  store.set({ connecting: true, roomCode: code, isHost: false, hostClosed: false, error: null });
+  store.set({ connecting: true, roomCode: code, isHost: false, hostClosed: false, error: null, connStatus: "connecting" });
 
   clientNet = new ClientNet(code);
   clientNet.onMessage = (data) => handleServerMessage(data);
   clientNet.onOpen = () => {
-    store.set({ connecting: false, hostClosed: false });
+    store.set({ connecting: false, hostClosed: false, connStatus: "connected" });
     clientNet.send({
       t: C.JOIN, nickname: profile.nickname, avatarColor: profile.avatarColor,
       sessionToken: mySessionToken || undefined,
     });
   };
-  clientNet.onClose = () => { /* auto-reconnect handled in ClientNet */ };
+  clientNet.onClose = () => { store.set({ connStatus: "reconnecting" }); };
 
   try {
     await clientNet.connect();
   } catch (err) {
-    store.set({ connecting: false });
+    store.set({ connecting: false, connStatus: "offline" });
     store.set({ error: err.message === "HOST_NOT_FOUND"
-      ? "Couldn't reach the room. Check the code and make sure the host still has the game open."
-      : "Connection failed. Try again." });
+      ? "Δεν βρέθηκε το δωμάτιο. Έλεγξε τον κωδικό και ότι ο host έχει ανοιχτό το παιχνίδι."
+      : "Η σύνδεση απέτυχε. Δοκίμασε ξανά." });
     role = null;
     clientNet.destroy(); clientNet = null;
   }
@@ -252,7 +258,8 @@ actions.leaveRoom = () => {
   location.hash = "";
   store.set({
     screen: "home", isHost: false, roomCode: null, me: null, room: null,
-    round: null, progress: null, reveal: null, hostClosed: false, connecting: false, error: null,
+    round: null, progress: null, reveal: null, present: null, connStatus: null,
+    hostClosed: false, connecting: false, error: null,
   });
 };
 

@@ -6,17 +6,29 @@
   <meta name="theme-color" content="#7c3aed" />
   <title>Tinaftore — γράψε, ζωγράφισε, μάντεψε!</title>
   <meta name="description" content="Tinaftore: το party παιχνίδι όπου γράφεις μια φράση, κάποιος τη ζωγραφίζει, κάποιος άλλος μαντεύει τι είναι. Φτιάξε δωμάτιο, μοίρασε τον 6ψήφιο κωδικό, παίξτε από το κινητό." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@500;600;700&display=swap&subset=greek,greek-ext,latin" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
   <link rel="icon" href="./assets/logo.png" />
   <link rel="apple-touch-icon" href="./assets/logo.png" />
 </head>
 <body>
-  <div id="bg-blobs" aria-hidden="true"></div>
+  <div id="bg-dots" aria-hidden="true"></div>
+  <div id="doodles" aria-hidden="true">
+    <span class="dd d1">⭐</span>
+    <span class="dd d2">✏️</span>
+    <span class="dd d3">✨</span>
+    <span class="dd d4">🎨</span>
+    <span class="dd d5">💬</span>
+    <span class="dd d6">❓</span>
+    <span class="dd d7">🌟</span>
+    <span class="dd d8">〽️</span>
+  </div>
+  <div id="status" class="status-pill" hidden></div>
   <main id="app"></main>
-  <footer class="app-footer">Tinaftore · peer-to-peer, χωρίς servers · φτιαγμένο για κινητό</footer>
 
-  <!-- Το PeerJS χειρίζεται μόνο το WebRTC handshake (δωρεάν public broker).
-       Τα δεδομένα του παιχνιδιού πάνε peer-to-peer· ο host είναι authoritative. -->
+  <!-- Το PeerJS χειρίζεται μόνο το WebRTC handshake (δωρεάν public broker). -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script type="module" src="./js/main.js"></script>
 </body>

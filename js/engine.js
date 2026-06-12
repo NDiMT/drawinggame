@@ -41,6 +41,7 @@ export class GameEngine {
       case C.SUBMIT_DRAWING: return this._onSubmitDrawing(connId, msg);
       case C.REACTION: return this._onReaction(connId, msg);
       case C.KICK: return this._onKick(connId, msg);
+      case C.PRESENT_CONTROL: return this._onPresentControl(connId, msg);
       case C.PLAY_AGAIN: return this._onPlayAgain(connId);
       case C.LEAVE: return this._onLeave(connId);
     }
@@ -101,6 +102,11 @@ export class GameEngine {
     if (this.status === STATUS.PLAYING) this._sendAssignment(player);
     if (this.status === STATUS.REVEALING || this.status === STATUS.FINISHED) {
       this.transport.send(player.connId, { t: S.REVEAL_STARTED, chains: this._revealData() });
+      if (this._present) {
+        this.transport.send(player.connId, {
+          t: S.PRESENT_STEP, index: this._present.index, playing: this._present.playing,
+        });
+      }
     }
   }
 
@@ -361,7 +367,62 @@ export class GameEngine {
     this.status = STATUS.REVEALING;
     this.transport.broadcast({ t: S.REVEAL_STARTED, chains: this._revealData() });
     this.status = STATUS.FINISHED;
+    // The host drives a synchronised, auto-playing presentation: it owns the
+    // step cursor + timer and broadcasts the current step to every client.
+    this._present = { steps: this._buildPresentSteps(), index: 0, playing: true };
+    this._broadcastPresent();
+    this._schedulePresent();
     this._save();
+  }
+
+  // Flat list of presentation steps (must match the client's buildSteps order):
+  // per chain -> title, then one step per entry; finally a single "end" step.
+  _buildPresentSteps() {
+    const chains = this.chains.slice().sort((a, b) => a.index - b.index);
+    const steps = [];
+    for (const c of chains) {
+      steps.push({ dur: 2100 });
+      c.entries.slice().sort((a, b) => a.roundNumber - b.roundNumber)
+        .forEach((e) => steps.push({ dur: e.type === "drawing" ? 4400 : 3400 }));
+    }
+    steps.push({ dur: 0 }); // end
+    return steps;
+  }
+
+  _schedulePresent() {
+    clearTimeout(this._presentTimer);
+    const s = this._present;
+    if (!s) return;
+    const last = s.steps.length - 1;
+    if (s.playing && s.index < last) {
+      this._presentTimer = setTimeout(() => {
+        s.index += 1;
+        this._broadcastPresent();
+        this._schedulePresent();
+      }, s.steps[s.index].dur);
+    }
+  }
+
+  _broadcastPresent() {
+    if (!this._present) return;
+    this.transport.broadcast({
+      t: S.PRESENT_STEP, index: this._present.index, playing: this._present.playing,
+    });
+  }
+
+  _onPresentControl(connId, { action }) {
+    const p = this._player(connId);
+    if (!p || !p.isHost || !this._present) return;
+    const s = this._present;
+    const last = s.steps.length - 1;
+    if (action === "play") s.playing = true;
+    else if (action === "pause") s.playing = false;
+    else if (action === "next") s.index = Math.min(last, s.index + 1);
+    else if (action === "prev") s.index = Math.max(0, s.index - 1);
+    else if (action === "restart") { s.index = 0; s.playing = true; }
+    else return;
+    this._broadcastPresent();
+    this._schedulePresent();
   }
 
   _onReaction(connId, { chainId, entryId, emoji }) {
@@ -385,6 +446,8 @@ export class GameEngine {
     this.chains = [];
     this.assignments = [];
     clearTimeout(this.timer);
+    clearTimeout(this._presentTimer);
+    this._present = null;
     this.players.forEach((pl) => (pl.isHost = pl.id === this.hostPlayerId));
     this._broadcastRoomState();
     this._save();
@@ -486,6 +549,11 @@ export class GameEngine {
       const remaining = Math.max(0, this.deadline - Date.now());
       clearTimeout(this.timer);
       this.timer = setTimeout(() => this._timeoutRound(), remaining);
+    }
+    // Resume the presentation from the start if we recovered during reveal.
+    if ((this.status === STATUS.REVEALING || this.status === STATUS.FINISHED) && this.chains.length) {
+      this._present = { steps: this._buildPresentSteps(), index: 0, playing: true };
+      this._schedulePresent();
     }
   }
 }

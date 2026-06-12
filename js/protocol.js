@@ -17,6 +17,7 @@ export const C = {
   REACTION: "reaction",
   KICK: "kick",
   PLAY_AGAIN: "playAgain",
+  PRESENT_CONTROL: "presentControl",
   LEAVE: "leave",
 };
 
@@ -30,6 +31,7 @@ export const S = {
   ROUND_ENDED: "roundEnded",
   WAITING: "waiting",
   REVEAL_STARTED: "revealStarted",
+  PRESENT_STEP: "presentStep",
   REACTION_NEW: "reactionNew",
   GAME_FINISHED: "gameFinished",
   KICKED: "kicked",

@@ -13,6 +13,8 @@ const state = {
   progress: null,          // { submitted, total }
   submitted: false,        // have I submitted this round
   reveal: null,            // chains for reveal
+  present: null,           // { index, playing } — host-driven presentation cursor
+  connStatus: null,        // connecting | connected | reconnecting | offline | host
   error: null,
   connecting: false,
   hostClosed: false,
