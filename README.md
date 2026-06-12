@@ -101,6 +101,13 @@ the site is just static files.
 - **Public broker dependency.** PeerJS's free broker is used for connection
   setup only. For guaranteed uptime, self-host a tiny `PeerServer` and point
   `net.js` at it (this would no longer be pure GitHub Pages).
+- **NAT traversal / TURN.** `net.js` ships public STUN servers plus a free
+  public TURN relay (OpenRelay) so phones on mobile data can still connect.
+  The free TURN relay is best-effort; for reliable production use, plug in your
+  own TURN (coturn) or a TURN provider key in `ICE_SERVERS`.
+- **Host must stay open.** The host's tab is the server. The host now
+  auto-re-registers with the broker after idle/background drops, and clients
+  retry + auto-reconnect — but if the host fully closes the tab, the room ends.
 - **Scale.** Designed for small friend groups (3–16). Star topology means the
   host uploads to every peer; very large drawings × many players will strain a
   weak host connection.

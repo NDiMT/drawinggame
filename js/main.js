@@ -188,7 +188,8 @@ async function startClient(code, profile) {
   } catch (err) {
     store.set({ connecting: false });
     store.set({ error: err.message === "HOST_NOT_FOUND"
-      ? "Room not found. Check the code." : "Connection failed." });
+      ? "Couldn't reach the room. Check the code and make sure the host still has the game open."
+      : "Connection failed. Try again." });
     role = null;
     clientNet.destroy(); clientNet = null;
   }

@@ -7,7 +7,26 @@ import { PEER_PREFIX } from "./protocol.js";
 
 /* global Peer */
 
-const PEER_OPTS = { debug: 1 };
+// ICE servers for NAT traversal. STUN alone fails on many mobile / CGNAT
+// networks, so we also include a free public TURN relay as a fallback path
+// (best-effort — for guaranteed reliability host your own TURN, e.g. coturn,
+// or use a TURN provider API key).
+const ICE_SERVERS = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun.cloudflare.com:3478" },
+  {
+    urls: [
+      "turn:openrelay.metered.ca:80",
+      "turn:openrelay.metered.ca:443",
+      "turn:openrelay.metered.ca:443?transport=tcp",
+    ],
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
+];
+
+const PEER_OPTS = { debug: 1, config: { iceServers: ICE_SERVERS } };
 
 export function hostPeerId(code) {
   return PEER_PREFIX + code;
@@ -22,6 +41,14 @@ export class HostNet {
     this.conns = new Map(); // connId -> DataConnection
     this.onMessage = () => {};
     this.onDisconnect = () => {};
+    this._destroyed = false;
+    this._onVisible = () => {
+      // Mobile browsers suspend background tabs and the broker drops us;
+      // re-register as soon as the host returns so new players can join.
+      if (this.peer && this.peer.disconnected && !this.peer.destroyed) {
+        try { this.peer.reconnect(); } catch (_) {}
+      }
+    };
   }
 
   // Resolves once the broker has registered our deterministic id.
@@ -29,12 +56,18 @@ export class HostNet {
     return new Promise((resolve, reject) => {
       this.peer = new Peer(hostPeerId(this.code), PEER_OPTS);
       this.peer.on("open", () => resolve());
+      this.peer.on("connection", (conn) => this._wire(conn));
+      this.peer.on("disconnected", () => {
+        // Broker dropped the signalling socket but our id is still ours.
+        // Re-register so the room stays findable; existing data channels live.
+        if (!this._destroyed) { try { this.peer.reconnect(); } catch (_) {} }
+      });
       this.peer.on("error", (err) => {
         if (err.type === "unavailable-id") reject(new Error("CODE_TAKEN"));
-        else if (this.peer.open) console.warn("peer error", err);
+        else if (this.peer && this.peer.open) console.warn("host peer error", err);
         else reject(err);
       });
-      this.peer.on("connection", (conn) => this._wire(conn));
+      document.addEventListener("visibilitychange", this._onVisible);
     });
   }
 
@@ -64,6 +97,8 @@ export class HostNet {
   }
 
   destroy() {
+    this._destroyed = true;
+    document.removeEventListener("visibilitychange", this._onVisible);
     try { this.peer && this.peer.destroy(); } catch (_) {}
   }
 }
@@ -79,37 +114,56 @@ export class ClientNet {
     this.onOpen = () => {};
     this.onClose = () => {};
     this._closedByUs = false;
-    this._retry = 0;
+    this._resolve = null;
+    this._reject = null;
+    this._dialAttempts = 0;     // attempts for the very first connection
+    this._onVisible = () => {
+      if (this.peer && this.peer.disconnected && !this.peer.destroyed) {
+        try { this.peer.reconnect(); } catch (_) {}
+      }
+    };
   }
 
   connect() {
     return new Promise((resolve, reject) => {
+      this._resolve = resolve;
+      this._reject = reject;
       this.peer = new Peer(PEER_OPTS);
-      this.peer.on("open", () => {
-        this._dial(resolve, reject);
+      this.peer.on("open", () => this._attemptDial());
+      this.peer.on("disconnected", () => {
+        if (!this._closedByUs) { try { this.peer.reconnect(); } catch (_) {} }
       });
-      this.peer.on("error", (err) => {
-        if (err.type === "peer-unavailable") {
-          reject(new Error("HOST_NOT_FOUND"));
-        } else if (!this.peer.open) {
-          reject(err);
-        }
-      });
+      this.peer.on("error", (err) => this._onPeerError(err));
+      document.addEventListener("visibilitychange", this._onVisible);
     });
   }
 
-  _dial(resolve, reject) {
+  _onPeerError(err) {
+    // The host id may not be registered yet (propagation) or the broker
+    // momentarily lost it — retry a few times before giving up.
+    if (err.type === "peer-unavailable") {
+      this._retryInitialDial();
+    } else if (this._reject && this.peer && !this.peer.open) {
+      this._fail(err);
+    } else {
+      console.warn("client peer error", err);
+    }
+  }
+
+  _attemptDial() {
+    this._dialAttempts += 1;
     const conn = this.peer.connect(hostPeerId(this.code), { reliable: true });
     this.conn = conn;
+
     const timeout = setTimeout(() => {
-      if (!conn.open) reject(new Error("HOST_NOT_FOUND"));
-    }, 8000);
+      if (!conn.open) this._retryInitialDial();
+    }, 6000);
 
     conn.on("open", () => {
       clearTimeout(timeout);
-      this._retry = 0;
+      this._dialAttempts = 0;
       this.onOpen();
-      if (resolve) { resolve(); resolve = null; }
+      if (this._resolve) { this._resolve(); this._resolve = null; this._reject = null; }
     });
     conn.on("data", (data) => this.onMessage(data));
     conn.on("close", () => {
@@ -117,18 +171,48 @@ export class ClientNet {
       if (!this._closedByUs) this._reconnect();
     });
     conn.on("error", () => {
-      if (reject && !conn.open) { clearTimeout(timeout); reject(new Error("HOST_NOT_FOUND")); reject = null; }
+      if (!conn.open) { clearTimeout(timeout); this._retryInitialDial(); }
     });
   }
 
-  // Auto-reconnect to the host (e.g. after a transient drop or host refresh).
+  // Retry the FIRST connection (room not found yet / transient broker issue).
+  // Deduped so the peer-error, conn-error and timeout paths can't stack.
+  _retryInitialDial() {
+    if (this._closedByUs || !this._reject) return; // already connected or torn down
+    if (this._retryScheduled) return;
+    if (this._dialAttempts >= 6) { this._fail(new Error("HOST_NOT_FOUND")); return; }
+    this._retryScheduled = true;
+    const delay = Math.min(1000 * this._dialAttempts, 4000);
+    setTimeout(() => {
+      this._retryScheduled = false;
+      if (this._closedByUs || !this._reject) return;
+      try { this._attemptDial(); } catch (_) {}
+    }, delay);
+  }
+
+  _fail(err) {
+    if (this._reject) { this._reject(err); this._reject = null; this._resolve = null; }
+  }
+
+  // Auto-reconnect after an established connection drops (host refresh, etc.).
   _reconnect() {
-    if (this._closedByUs || this._retry > 12) return;
-    this._retry += 1;
-    const delay = Math.min(1000 * this._retry, 5000);
+    if (this._closedByUs) return;
+    this._reconnTries = (this._reconnTries || 0) + 1;
+    if (this._reconnTries > 30) return;
+    const delay = Math.min(1000 * this._reconnTries, 5000);
     setTimeout(() => {
       if (this._closedByUs) return;
-      try { this._dial(null, () => {}); } catch (_) {}
+      if (this.peer && this.peer.disconnected && !this.peer.destroyed) {
+        try { this.peer.reconnect(); } catch (_) {}
+      }
+      try {
+        const conn = this.peer.connect(hostPeerId(this.code), { reliable: true });
+        this.conn = conn;
+        conn.on("open", () => { this._reconnTries = 0; this.onOpen(); });
+        conn.on("data", (data) => this.onMessage(data));
+        conn.on("close", () => { this.onClose(); if (!this._closedByUs) this._reconnect(); });
+        conn.on("error", () => {});
+      } catch (_) {}
     }, delay);
   }
 
@@ -138,6 +222,7 @@ export class ClientNet {
 
   destroy() {
     this._closedByUs = true;
+    document.removeEventListener("visibilitychange", this._onVisible);
     try { this.peer && this.peer.destroy(); } catch (_) {}
   }
 }
