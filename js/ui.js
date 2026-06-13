@@ -2,13 +2,13 @@
 // ενεργή οθόνη. Στέλνει ενέργειες παίκτη μέσω actions.js. Καθαρό view layer —
 // δεν αποφασίζει ποτέ state, απλώς δείχνει ό,τι στέλνει ο host.
 
-import { store } from "./store.js?v=13";
-import { actions } from "./actions.js?v=13";
-import { C, TASK, MIN_PLAYERS, MAX_TEXT } from "./protocol.js?v=13";
-import { el, AVATAR_COLORS, randomColor } from "./util.js?v=13";
-import { DrawingCanvas } from "./canvas.js?v=13";
-import { confetti } from "./confetti.js?v=13";
-import * as music from "./music.js?v=13";
+import { store } from "./store.js?v=14";
+import { actions } from "./actions.js?v=14";
+import { C, TASK, MIN_PLAYERS, MAX_TEXT } from "./protocol.js?v=14";
+import { el, AVATAR_COLORS, randomColor } from "./util.js?v=14";
+import { DrawingCanvas } from "./canvas.js?v=14";
+import { confetti } from "./confetti.js?v=14";
+import * as music from "./music.js?v=14";
 
 const REACTIONS = ["👍", "😂", "😮", "❤️", "🔥", "👏"];
 const LOGO_SRC = "./assets/logo.png?v=2";

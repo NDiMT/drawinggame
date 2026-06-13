@@ -7,16 +7,25 @@
   <title>Tinaftore — γράψε, ζωγράφισε, μάντεψε!</title>
   <link rel="canonical" href="https://tinaftore.com/" />
   <script>
-    // Κανονικοποίηση host: www -> σκέτο tinaftore.com (εκτός από το GitHub redirect).
-    if (location.hostname === "www.tinaftore.com") {
-      location.replace("https://tinaftore.com" + location.pathname + location.search + location.hash);
-    }
+    // Κανονικοποίηση: εξανάγκασε https + στείλε το www στο σκέτο tinaftore.com.
+    // (Το GitHub "Enforce HTTPS" το κάνει ήδη server-side· αυτό είναι backup.)
+    (function () {
+      var h = location.hostname;
+      var isLocal = h === "localhost" || h === "127.0.0.1" || h.endsWith(".local");
+      if (!isLocal && location.protocol === "http:") {
+        location.replace("https://" + h + location.pathname + location.search + location.hash);
+        return;
+      }
+      if (h === "www.tinaftore.com") {
+        location.replace("https://tinaftore.com" + location.pathname + location.search + location.hash);
+      }
+    })();
   </script>
   <meta name="description" content="Tinaftore: το party παιχνίδι όπου γράφεις μια φράση, κάποιος τη ζωγραφίζει, κάποιος άλλος μαντεύει τι είναι. Φτιάξε δωμάτιο, μοίρασε τον 6ψήφιο κωδικό, παίξτε από το κινητό." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@500;600;700&display=swap&subset=greek,greek-ext,latin" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=13" />
+  <link rel="stylesheet" href="./styles.css?v=14" />
   <link rel="icon" href="./assets/logo.png?v=2" />
   <link rel="apple-touch-icon" href="./assets/logo.png?v=2" />
 </head>
@@ -37,6 +46,6 @@
 
   <!-- Το PeerJS χειρίζεται μόνο το WebRTC handshake (δωρεάν public broker). -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script type="module" src="./js/main.js?v=13"></script>
+  <script type="module" src="./js/main.js?v=14"></script>
 </body>
 </html>
