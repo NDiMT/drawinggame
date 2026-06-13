@@ -2,7 +2,7 @@
 // touch-friendly. Stores strokes so undo/redo and re-render are exact, and
 // exports a PNG data URL for submission.
 
-import { clamp } from "./util.js?v=12";
+import { clamp } from "./util.js?v=13";
 
 export class DrawingCanvas {
   constructor(canvas, { width = 1024, height = 768 } = {}) {
