@@ -7,8 +7,8 @@
 import {
   C, S, TASK, STATUS, MIN_PLAYERS, DEFAULT_SETTINGS,
   taskTypeForRound, entryTypeForTask,
-} from "./protocol.js?v=14";
-import { uid, sanitizeText, randomColor } from "./util.js?v=14";
+} from "./protocol.js?v=15";
+import { uid, sanitizeText, randomColor } from "./util.js?v=15";
 
 export class GameEngine {
   constructor({ roomCode, transport, settings = {}, onSnapshot = () => {} }) {

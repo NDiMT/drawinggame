@@ -2,13 +2,13 @@
 // ενεργή οθόνη. Στέλνει ενέργειες παίκτη μέσω actions.js. Καθαρό view layer —
 // δεν αποφασίζει ποτέ state, απλώς δείχνει ό,τι στέλνει ο host.
 
-import { store } from "./store.js?v=14";
-import { actions } from "./actions.js?v=14";
-import { C, TASK, MIN_PLAYERS, MAX_TEXT } from "./protocol.js?v=14";
-import { el, AVATAR_COLORS, randomColor } from "./util.js?v=14";
-import { DrawingCanvas } from "./canvas.js?v=14";
-import { confetti } from "./confetti.js?v=14";
-import * as music from "./music.js?v=14";
+import { store } from "./store.js?v=15";
+import { actions } from "./actions.js?v=15";
+import { C, TASK, MIN_PLAYERS, MAX_TEXT } from "./protocol.js?v=15";
+import { el, AVATAR_COLORS, randomColor } from "./util.js?v=15";
+import { DrawingCanvas } from "./canvas.js?v=15";
+import { confetti } from "./confetti.js?v=15";
+import * as music from "./music.js?v=15";
 
 const REACTIONS = ["👍", "😂", "😮", "❤️", "🔥", "👏"];
 const LOGO_SRC = "./assets/logo.png?v=2";
@@ -281,7 +281,7 @@ function writingScreen(s) {
   const counter = el("span", { class: "muted tiny", text: `0/${MAX_TEXT}` });
   const ta = el("textarea", {
     class: "input textarea", maxlength: String(MAX_TEXT),
-    placeholder: "Γράψε μια παράξενη φράση για να τη ζωγραφίσει κάποιος…",
+    placeholder: "π.χ. ένας σκύλος που σερφάρει σε μια πίτσα 🍕🏄",
     oninput: (e) => { value = e.target.value; counter.textContent = `${value.length}/${MAX_TEXT}`; },
   });
   const submit = () => {
@@ -291,7 +291,8 @@ function writingScreen(s) {
   return el("div", { class: "card round" }, [
     roundBadge(r),
     timerBar(r.deadline),
-    el("p", { class: "prompt-instr", text: "Γράψε κάτι αστείο κι απρόσμενο." }),
+    el("p", { class: "prompt-instr", text: "Τι θέλεις να ζωγραφίσει ο επόμενος;" }),
+    el("p", { class: "muted tiny center", text: "Γράψε μια ξεκάθαρη φράση — κάτι αστείο κι απρόσμενο δουλεύει τέλεια!" }),
     ta, counter,
     el("button", { class: "btn primary big", onclick: submit }, "Υποβολή"),
   ]);
@@ -475,11 +476,28 @@ function presentControls(idx, playing, isHost) {
   ]);
 }
 
+function entryBlock(e, isNew) {
+  const who = e.player ? e.player.nickname : "?";
+  const verb = e.type === "prompt" ? "έγραψε" : e.type === "drawing" ? "ζωγράφισε" : "μάντεψε";
+  const body = e.type === "drawing"
+    ? el("div", { class: "show-drawing-frame" }, [el("img", { class: "show-drawing", src: e.imageUrl, alt: "ζωγραφιά" })])
+    : el("div", { class: "show-bubble", text: e.textContent });
+  return el("div", { class: "show-item" + (isNew ? " pop-in" : "") }, [
+    el("div", { class: "show-author" }, [
+      e.player ? avatar(e.player, 34) : null,
+      el("span", { class: "show-name", text: who }),
+      el("span", { class: "verb-chip", text: verb }),
+    ]),
+    body,
+  ]);
+}
+
 function renderShow(step, idx, playing, isHost) {
   const totalChains = (presentChainsRef || []).length;
+  const c = step.chain;
 
+  // Title beat: big intro card for the chain.
   if (step.kind === "title") {
-    const c = step.chain;
     return el("div", { class: "card reveal show" }, [
       el("div", { class: "show-stage title-stage" }, [
         el("div", { class: "chain-num pop-in", text: `Αλυσίδα ${c.index + 1} / ${totalChains}` }),
@@ -493,27 +511,20 @@ function renderShow(step, idx, playing, isHost) {
     ]);
   }
 
-  const e = step.entry;
-  const who = e.player ? e.player.nickname : "?";
-  const verb = e.type === "prompt" ? "έγραψε" : e.type === "drawing" ? "ζωγράφισε" : "μάντεψε";
-  const lead = e.i === 0 ? "Όλα ξεκίνησαν με…" : null;
-
-  const body = e.type === "drawing"
-    ? el("div", { class: "show-drawing-frame pop-in" }, [el("img", { class: "show-drawing", src: e.imageUrl, alt: "ζωγραφιά" })])
-    : el("div", { class: "show-bubble pop-in", text: e.textContent });
-
-  return el("div", { class: "card reveal show" }, [
-    el("div", { class: "show-stage" }, [
-      lead ? el("p", { class: "show-lead fade-in", text: lead }) : null,
-      el("div", { class: "show-author slide-in" }, [
-        e.player ? avatar(e.player, 40) : null,
-        el("span", { class: "show-name", text: who }),
-        el("span", { class: "verb-chip", text: verb }),
-      ]),
-      body,
+  // Entry steps: show the whole chain so far, stacked top-to-bottom, with the
+  // newest entry animating in and the view auto-scrolled to it.
+  const showCount = step.i + 1;
+  const stack = el("div", { class: "show-stack" }, [
+    el("div", { class: "stack-title" }, [
+      el("span", { class: "stack-chain", text: `Αλυσίδα ${c.index + 1}/${totalChains}` }),
+      c.originPlayer ? el("span", { class: "muted tiny", text: `ξεκίνησε ${c.originPlayer.nickname}` }) : null,
     ]),
-    presentControls(idx, playing, isHost),
+    ...c.entries.slice(0, showCount).map((e, k) => entryBlock(e, k === showCount - 1)),
   ]);
+
+  const card = el("div", { class: "card reveal show" }, [stack, presentControls(idx, playing, isHost)]);
+  requestAnimationFrame(() => { stack.scrollTop = stack.scrollHeight; });
+  return card;
 }
 
 function renderEnd(s) {
@@ -658,6 +669,7 @@ function connectingScreen(s) {
     el("div", { class: "spinner" }),
     el("h2", { class: "screen-title", text: "Σύνδεση…" }),
     el("p", { class: "muted", text: s.roomCode ? `Δωμάτιο ${s.roomCode}` : "Στήνουμε τη σύνδεση peer-to-peer" }),
+    el("button", { class: "btn ghost", onclick: () => actions.leaveRoom() }, "Έξοδος"),
   ]);
 }
 
