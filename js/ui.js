@@ -2,13 +2,13 @@
 // ενεργή οθόνη. Στέλνει ενέργειες παίκτη μέσω actions.js. Καθαρό view layer —
 // δεν αποφασίζει ποτέ state, απλώς δείχνει ό,τι στέλνει ο host.
 
-import { store } from "./store.js?v=17";
-import { actions } from "./actions.js?v=17";
-import { C, TASK, MIN_PLAYERS, MAX_TEXT } from "./protocol.js?v=17";
-import { el, AVATAR_COLORS, randomColor } from "./util.js?v=17";
-import { DrawingCanvas } from "./canvas.js?v=17";
-import { confetti } from "./confetti.js?v=17";
-import * as music from "./music.js?v=17";
+import { store } from "./store.js?v=18";
+import { actions } from "./actions.js?v=18";
+import { C, TASK, MIN_PLAYERS, MAX_TEXT } from "./protocol.js?v=18";
+import { el, AVATAR_COLORS, randomColor } from "./util.js?v=18";
+import { DrawingCanvas } from "./canvas.js?v=18";
+import { confetti } from "./confetti.js?v=18";
+import * as music from "./music.js?v=18";
 
 const REACTIONS = ["👍", "😂", "😮", "❤️", "🔥", "👏"];
 const LOGO_SRC = "./assets/logo.png?v=2";
@@ -523,11 +523,17 @@ function renderShow(step, idx, playing, isHost) {
   ]);
 
   const card = el("div", { class: "card reveal show" }, [stack, presentControls(idx, playing, isHost)]);
-  // Pin to the newest entry. Do it on the next frame and again shortly after,
-  // so the bottom (incl. the bubble's tail) is fully in view after layout.
-  const toBottom = () => { stack.scrollTop = stack.scrollHeight; };
-  requestAnimationFrame(toBottom);
-  setTimeout(toBottom, 120);
+  // Bring the newest entry fully into view (its bottom + bubble tail). Repeat
+  // across a few frames so it lands after layout and the pop-in animation.
+  const pin = () => {
+    const items = stack.querySelectorAll(".show-item");
+    const last = items[items.length - 1];
+    if (last) last.scrollIntoView({ block: "end" });
+    else stack.scrollTop = stack.scrollHeight;
+  };
+  requestAnimationFrame(pin);
+  setTimeout(pin, 140);
+  setTimeout(pin, 500);
   return card;
 }
 

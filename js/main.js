@@ -2,13 +2,13 @@
 // client (talks to a host), wires the transport, and translates server
 // messages into store updates that the UI renders.
 
-import { store } from "./store.js?v=17";
-import { actions } from "./actions.js?v=17";
-import { initUI } from "./ui.js?v=17";
-import { GameEngine } from "./engine.js?v=17";
-import { HostNet, ClientNet } from "./net.js?v=17";
-import { C, S, STATUS } from "./protocol.js?v=17";
-import { randomCode, sessionToken as makeToken } from "./util.js?v=17";
+import { store } from "./store.js?v=18";
+import { actions } from "./actions.js?v=18";
+import { initUI } from "./ui.js?v=18";
+import { GameEngine } from "./engine.js?v=18";
+import { HostNet, ClientNet } from "./net.js?v=18";
+import { C, S, STATUS } from "./protocol.js?v=18";
+import { randomCode, sessionToken as makeToken } from "./util.js?v=18";
 
 const LOCAL = "LOCAL"; // sentinel connId for the host's own player
 const SESSION_KEY = "dr_session";
