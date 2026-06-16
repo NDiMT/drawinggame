@@ -5,10 +5,10 @@
 // state on its own" rule.
 
 import {
-  C, S, TASK, STATUS, MIN_PLAYERS, DEFAULT_SETTINGS,
+  C, S, TASK, STATUS, MIN_PLAYERS, MAX_PLAYERS, MAX_ROUNDS, DEFAULT_SETTINGS,
   taskTypeForRound, entryTypeForTask,
-} from "./protocol.js?v=16";
-import { uid, sanitizeText, randomColor } from "./util.js?v=16";
+} from "./protocol.js?v=17";
+import { uid, sanitizeText, randomColor } from "./util.js?v=17";
 
 export class GameEngine {
   constructor({ roomCode, transport, settings = {}, onSnapshot = () => {} }) {
@@ -123,7 +123,7 @@ export class GameEngine {
     const p = this._player(connId);
     if (!p || !p.isHost || this.status !== STATUS.LOBBY) return;
     const limits = {
-      maxPlayers: [3, 16], writingTimer: [15, 300],
+      maxPlayers: [3, MAX_PLAYERS], writingTimer: [15, 300],
       drawingTimer: [30, 400], guessingTimer: [15, 300],
     };
     if (!limits[key] || typeof value !== "number" || Number.isNaN(value)) return;
@@ -193,7 +193,8 @@ export class GameEngine {
     // Freeze the ordered player list and build one chain per player.
     this.players = connected;
     this.status = STATUS.PLAYING;
-    this.totalRounds = this.players.length;
+    // Cap rounds so big lobbies don't drag (each chain gets this many entries).
+    this.totalRounds = Math.min(this.players.length, MAX_ROUNDS);
     this.chains = this.players.map((p, i) => ({
       id: uid("chain"),
       originPlayerId: p.id,

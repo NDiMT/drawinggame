@@ -48,10 +48,14 @@ export const STATUS = {
 };
 
 export const MIN_PLAYERS = 3;
+export const MAX_PLAYERS = 8;
 export const MAX_TEXT = 120;
+// Cap rounds so a big lobby doesn't drag: a game is at most this many rounds,
+// regardless of player count (each chain ends up with this many entries).
+export const MAX_ROUNDS = 5;
 
 export const DEFAULT_SETTINGS = {
-  maxPlayers: 10,
+  maxPlayers: MAX_PLAYERS,
   writingTimer: 60,
   drawingTimer: 120,
   guessingTimer: 60,

@@ -2,13 +2,13 @@
 // ενεργή οθόνη. Στέλνει ενέργειες παίκτη μέσω actions.js. Καθαρό view layer —
 // δεν αποφασίζει ποτέ state, απλώς δείχνει ό,τι στέλνει ο host.
 
-import { store } from "./store.js?v=16";
-import { actions } from "./actions.js?v=16";
-import { C, TASK, MIN_PLAYERS, MAX_TEXT } from "./protocol.js?v=16";
-import { el, AVATAR_COLORS, randomColor } from "./util.js?v=16";
-import { DrawingCanvas } from "./canvas.js?v=16";
-import { confetti } from "./confetti.js?v=16";
-import * as music from "./music.js?v=16";
+import { store } from "./store.js?v=17";
+import { actions } from "./actions.js?v=17";
+import { C, TASK, MIN_PLAYERS, MAX_TEXT } from "./protocol.js?v=17";
+import { el, AVATAR_COLORS, randomColor } from "./util.js?v=17";
+import { DrawingCanvas } from "./canvas.js?v=17";
+import { confetti } from "./confetti.js?v=17";
+import * as music from "./music.js?v=17";
 
 const REACTIONS = ["👍", "😂", "😮", "❤️", "🔥", "👏"];
 const LOGO_SRC = "./assets/logo.png?v=2";
@@ -523,7 +523,11 @@ function renderShow(step, idx, playing, isHost) {
   ]);
 
   const card = el("div", { class: "card reveal show" }, [stack, presentControls(idx, playing, isHost)]);
-  requestAnimationFrame(() => { stack.scrollTop = stack.scrollHeight; });
+  // Pin to the newest entry. Do it on the next frame and again shortly after,
+  // so the bottom (incl. the bubble's tail) is fully in view after layout.
+  const toBottom = () => { stack.scrollTop = stack.scrollHeight; };
+  requestAnimationFrame(toBottom);
+  setTimeout(toBottom, 120);
   return card;
 }
 
