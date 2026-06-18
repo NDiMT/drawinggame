@@ -2,7 +2,7 @@
 // touch-friendly. Stores strokes so undo/redo and re-render are exact, and
 // exports a PNG data URL for submission.
 
-import { clamp } from "./util.js?v=18";
+import { clamp } from "./util.js?v=19";
 
 export class DrawingCanvas {
   constructor(canvas, { width = 1024, height = 768 } = {}) {
@@ -144,10 +144,11 @@ export class DrawingCanvas {
 
   isBlank() { return this.strokes.length === 0; }
 
-  // Export a downscaled PNG (white background) to keep data-channel
-  // messages small. Strokes are stored in logical coordinates, so we just
-  // render them onto an output canvas scaled from logical -> output.
-  toPNG(maxW = 900) {
+  // Export a downscaled image (white background) to keep data-channel
+  // messages small — large PNGs of filled drawings can be megabytes and fail
+  // to transmit over WebRTC in time (arriving after the round timeout =
+  // blank). WebP/JPEG keep it tiny; fall back to PNG only if unsupported.
+  toImage(maxW = 800) {
     const scale = Math.min(1, maxW / this.logicalW);
     const out = document.createElement("canvas");
     out.width = Math.round(this.logicalW * scale);
@@ -172,6 +173,15 @@ export class DrawingCanvas {
       octx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
       octx.stroke();
     }
+    // Prefer WebP (smallest), then JPEG, then PNG.
+    try {
+      const webp = out.toDataURL("image/webp", 0.82);
+      if (webp.startsWith("data:image/webp")) return webp;
+    } catch (_) {}
+    try {
+      const jpeg = out.toDataURL("image/jpeg", 0.85);
+      if (jpeg.startsWith("data:image/jpeg")) return jpeg;
+    } catch (_) {}
     return out.toDataURL("image/png");
   }
 }

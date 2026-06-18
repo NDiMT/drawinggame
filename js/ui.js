@@ -2,13 +2,13 @@
 // ενεργή οθόνη. Στέλνει ενέργειες παίκτη μέσω actions.js. Καθαρό view layer —
 // δεν αποφασίζει ποτέ state, απλώς δείχνει ό,τι στέλνει ο host.
 
-import { store } from "./store.js?v=18";
-import { actions } from "./actions.js?v=18";
-import { C, TASK, MIN_PLAYERS, MAX_TEXT } from "./protocol.js?v=18";
-import { el, AVATAR_COLORS, randomColor } from "./util.js?v=18";
-import { DrawingCanvas } from "./canvas.js?v=18";
-import { confetti } from "./confetti.js?v=18";
-import * as music from "./music.js?v=18";
+import { store } from "./store.js?v=19";
+import { actions } from "./actions.js?v=19";
+import { C, TASK, MIN_PLAYERS, MAX_TEXT } from "./protocol.js?v=19";
+import { el, AVATAR_COLORS, randomColor } from "./util.js?v=19";
+import { DrawingCanvas } from "./canvas.js?v=19";
+import { confetti } from "./confetti.js?v=19";
+import * as music from "./music.js?v=19";
 
 const REACTIONS = ["👍", "😂", "😮", "❤️", "🔥", "👏"];
 const LOGO_SRC = "./assets/logo.png?v=2";
@@ -285,6 +285,7 @@ function writingScreen(s) {
     oninput: (e) => { value = e.target.value; counter.textContent = `${value.length}/${MAX_TEXT}`; },
   });
   const submit = () => {
+    if (value.trim().length < 3) return flash("Γράψε τουλάχιστον 3 χαρακτήρες ✍️");
     actions.sendToHost({ t: C.SUBMIT_TEXT, assignmentId: r.assignmentId, text: value });
     store.set({ screen: "waiting", submitted: true });
   };
@@ -307,6 +308,7 @@ function guessingScreen(s) {
     oninput: (e) => { value = e.target.value; counter.textContent = `${value.length}/${MAX_TEXT}`; },
   });
   const submit = () => {
+    if (value.trim().length < 3) return flash("Γράψε τουλάχιστον 3 χαρακτήρες 🤔");
     actions.sendToHost({ t: C.SUBMIT_TEXT, assignmentId: r.assignmentId, text: value });
     store.set({ screen: "waiting", submitted: true });
   };
@@ -341,8 +343,10 @@ function drawingScreen(s) {
     activeCanvas = new DrawingCanvas(canvasEl, { width: 1024, height: 768 });
     wireToolbar(wrap, activeCanvas);
     wrap.querySelector("#submit-draw").addEventListener("click", () => {
-      const png = activeCanvas.toPNG();
-      actions.sendToHost({ t: C.SUBMIT_DRAWING, assignmentId: r.assignmentId, imageUrl: png });
+      if (activeCanvas.isBlank()) return flash("Ζωγράφισε κάτι πρώτα! 🎨");
+      const img = activeCanvas.toImage();
+      if (!img || !img.startsWith("data:image/")) return flash("Κάτι πήγε στραβά με τη ζωγραφιά, δοκίμασε ξανά.");
+      actions.sendToHost({ t: C.SUBMIT_DRAWING, assignmentId: r.assignmentId, imageUrl: img });
       store.set({ screen: "waiting", submitted: true });
     });
   });
