@@ -3,27 +3,21 @@
 // it without any signalling server of our own (PeerJS's free broker handles
 // only the connection handshake; game data flows peer-to-peer).
 
-import { PEER_PREFIX } from "./protocol.js?v=19";
+import { PEER_PREFIX } from "./protocol.js?v=20";
 
 /* global Peer */
 
-// ICE servers for NAT traversal. STUN alone fails on many mobile / CGNAT
-// networks, so we also include a free public TURN relay as a fallback path
-// (best-effort — for guaranteed reliability host your own TURN, e.g. coturn,
-// or use a TURN provider API key).
+// ICE servers for NAT traversal. We use multiple public STUN servers.
+// NOTE: the previous free TURN relay (OpenRelay) was shut down; a dead TURN
+// entry can slow down / disrupt ICE on some networks, so it's removed. For
+// guaranteed connectivity across strict/mobile NATs, plug a working TURN
+// (e.g. Metered free tier or self-hosted coturn) into ICE_SERVERS.
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun2.l.google.com:19302" },
+  { urls: "stun:stun3.l.google.com:19302" },
   { urls: "stun:stun.cloudflare.com:3478" },
-  {
-    urls: [
-      "turn:openrelay.metered.ca:80",
-      "turn:openrelay.metered.ca:443",
-      "turn:openrelay.metered.ca:443?transport=tcp",
-    ],
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
 ];
 
 const PEER_OPTS = { debug: 1, config: { iceServers: ICE_SERVERS } };
